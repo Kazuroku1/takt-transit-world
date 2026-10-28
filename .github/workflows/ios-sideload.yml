@@ -1,0 +1,55 @@
+name: iPhone-App bauen (AltStore)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-sideload
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Installationsdatei erstellen
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Xcode 26 auswaehlen
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+      - name: Abhaengigkeiten installieren
+        run: npm ci
+      - name: Spielregeln testen
+        run: npm test
+      - name: Spiel ins iOS-Projekt kopieren
+        run: npm run ios:sync
+      - name: Unsigniertes iPhone-Paket bauen
+        run: bash scripts/build-ipa.sh
+      - name: IPA zum Herunterladen bereitstellen
+        uses: actions/upload-artifact@v4
+        with:
+          name: Takt-iPhone-AltStore
+          path: build/Takt.ipa
+          if-no-files-found: error
+          retention-days: 1
+      - name: Naechste Schritte anzeigen
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## Takt fuer dein iPhone
+
+          1. Das Artefakt **Takt-iPhone-AltStore** herunterladen und entpacken.
+          2. `Takt.ipa` mit **AltStore Classic** auf dem iPhone installieren.
+          3. Fuer die Signierung reicht ein kostenloses Apple-Konto in AltServer.
+
+          Die IPA ist bewusst nicht signiert. AltServer signiert sie fuer dein eigenes Geraet.
+          Mit einem kostenlosen Apple-Konto muss sie alle sieben Tage erneuert werden.
+          [Offizielle Windows-Anleitung](https://faq.altstore.io/altstore-classic/how-to-install-altstore-windows)
+
+          Die Datei bleibt einen Tag als Artefakt verfuegbar.
+          EOF
