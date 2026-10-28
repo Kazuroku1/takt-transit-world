@@ -1,0 +1,44 @@
+TAKT AUF DEIN IPHONE INSTALLIEREN — KOSTENLOS MIT WINDOWS
+
+Du brauchst:
+- dein iPhone und ein USB-Kabel
+- deinen Windows-PC
+- ein normales, kostenloses Apple-Konto
+- Takt.ipa (nach erfolgreichem Build im Ordner build)
+
+1. ALTSERVER AUF WINDOWS EINRICHTEN
+   Folge der offiziellen Anleitung für AltStore Classic:
+   https://faq.altstore.io/altstore-classic/how-to-install-altstore-windows
+
+   Installiere die dort angegebenen Apple-Komponenten und AltServer.
+   Verbinde dein entsperrtes iPhone per USB und vertraue dem Computer.
+   Über das AltServer-Symbol im Infobereich: Install AltStore → dein iPhone.
+   Melde dich in AltServer mit deinem Apple-Konto an.
+
+2. AUF DEM IPHONE FREIGEBEN
+   Vertraue dem Entwicklerprofil, wenn iOS danach fragt:
+   Einstellungen → Allgemein → VPN und Geräteverwaltung.
+   Aktiviere bei Bedarf den Entwicklermodus unter Datenschutz & Sicherheit.
+
+3. TAKT INSTALLIEREN
+   Übertrage die Datei Takt.ipa in die Dateien-App auf deinem iPhone,
+   zum Beispiel über iCloud Drive oder OneDrive.
+   AltServer muss auf dem PC erreichbar sein, per USB oder im selben WLAN.
+   Öffne AltStore Classic → My Apps → + und wähle Takt.ipa.
+   Nach der Installation findest du Takt als eigene App auf dem Home-Bildschirm.
+
+4. REGELMÄSSIG ERNEUERN
+   Mit einem kostenlosen Apple-Konto gilt die Signierung sieben Tage.
+   Öffne rechtzeitig AltStore → My Apps → Refresh All, während AltServer
+   erreichbar ist. Eine eingerichtete Hintergrund-Erneuerung kann das übernehmen.
+   Es können höchstens drei sideloaded Apps gleichzeitig aktiv sein;
+   AltStore selbst zählt mit.
+
+Kein Mac und keine kostenpflichtige Developer-Mitgliedschaft erforderlich.
+TestFlight wird bei diesem kostenlosen Installationsweg nicht verwendet.
+
+SPIELSTART
+Dein erster Bus fährt bereits in Zürich. Kaufe eine zweite feste Linie,
+hole unter Aufgaben die Belohnung ab und schalte die Tram frei.
+Alle Strecken sind vorgegeben. Zusätzliche Fahrzeuge erhöhen deine Einnahmen.
+Der Spielfortschritt wird lokal auf dem jeweiligen Gerät gespeichert.

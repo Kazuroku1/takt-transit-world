@@ -44,13 +44,13 @@ Für den persönlichen Test ist kein bezahltes Entwicklerkonto nötig. Der vorbe
 
 **Kostenrahmen:** Standard-Runner sind für öffentliche GitHub-Repositories kostenlos. Private Repositories haben ein kostenloses Kontingent; vor dem Start muss genügend davon übrig sein und eine Kostenbegrenzung auf 0 gesetzt sein, wenn keine Kosten entstehen dürfen. Das Projekt wird nicht ohne Entscheidung des Eigentümers öffentlich gemacht. [GitHub-Abrechnung](https://docs.github.com/en/billing/concepts/product-billing/github-actions), [AltStore-Limits](https://faq.altstore.io/altstore-classic/your-altstore).
 
-Der Cloud-Workflow ist vorbereitet, aber ein erfolgreicher Xcode-Build und eine Installation auf dem iPhone müssen noch bestätigt werden. Das Projekt allein ist noch keine fertige IPA-Datei.
+Der erste [Cloud-Build mit Xcode 26](https://github.com/Kazuroku1/takt-transit-world/actions/runs/40695807396) hat das iPhone-Archiv und `Takt.ipa` erfolgreich erzeugt. Die lokal heruntergeladene Installationsdatei liegt in `build/Takt.ipa`. Die Installation auf einem physischen iPhone muss noch mit AltStore durchgeführt werden. Eine kurze Anleitung steht in `INSTALLATION.txt`.
 
 ## Optional: TestFlight mit Entwickler-Mitgliedschaft
 
 Das Xcode-Projekt liegt unter `ios/App/App.xcodeproj`. App-ID: `ch.takt.transitworld`. App-Icon und Startbild sind enthalten. Das native Projekt verwendet Swift Package Manager; CocoaPods ist nicht nötig.
 
-Der JavaScript-Build und das Kopieren ins iOS-Projekt funktionieren auch auf Windows. **Zum Kompilieren, Signieren und Hochladen werden ein Mac mit Xcode 26 oder neuer und für TestFlight ein Apple-Developer-Konto benötigt.** Ein nativer Build wurde in der Windows-Entwicklungsumgebung nicht ausgeführt.
+Der JavaScript-Build und das Kopieren ins iOS-Projekt funktionieren auch auf Windows. **Zum Kompilieren wird macOS mit Xcode 26 oder neuer benötigt; den Mac kann wie beim getesteten GitHub-Workflow ein Cloud-Anbieter bereitstellen.** Für TestFlight sind zusätzlich die kostenpflichtige Apple-Developer-Mitgliedschaft sowie Signierung und Upload nötig. Der kostenlose AltStore-Weg oben verwendet dagegen eine unsignierte IPA und signiert erst auf deinem Windows-PC für dein Gerät.
 
 Auf dem Mac:
 
