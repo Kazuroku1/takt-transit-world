@@ -27,6 +27,7 @@ def refs(names):
 sources = sorted((root / "Takt").glob("*.swift"))
 tests = sorted((root / "TaktUITests").glob("*.swift"))
 app_refs, app_builds, test_refs, test_builds = [], [], [], []
+resource_builds = ["build-assets", "build-privacy"]
 for files, prefix, reference_list, build_list in [(sources,"app",app_refs,app_builds),(tests,"test",test_refs,test_builds)]:
     for file in files:
         ref, build = f"{prefix}-{file.name}", f"build-{prefix}-{file.name}"
@@ -40,6 +41,15 @@ for name, path, filetype in [("assets","Assets.xcassets","folder.assetcatalog"),
 for name in ["assets","privacy"]:
     obj("build-"+name,"PBXBuildFile",f"fileRef = {ident(name)};")
 
+for file in sorted((root / "Takt" / "Resources").glob("*")):
+    if not file.is_file():
+        continue
+    name = "resource-" + file.name
+    obj(name,"PBXFileReference",f'lastKnownFileType = file; path = {quote("Resources/" + file.name)}; sourceTree = "<group>";')
+    obj("build-"+name,"PBXBuildFile",f"fileRef = {ident(name)};")
+    app_refs.append(name)
+    resource_builds.append("build-"+name)
+
 obj("app-product","PBXFileReference",'explicitFileType = wrapper.application; includeInIndex = 0; path = Takt.app; sourceTree = BUILT_PRODUCTS_DIR;')
 obj("test-product","PBXFileReference",'explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TaktUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR;')
 obj("app-group","PBXGroup",f'children = {refs(app_refs)} path = Takt; sourceTree = "<group>";')
@@ -50,7 +60,7 @@ obj("core-package","XCLocalSwiftPackageReference",'relativePath = ".";')
 obj("core-product","XCSwiftPackageProductDependency",f'package = {ident("core-package")}; productName = TaktCore;')
 obj("build-core","PBXBuildFile",f'productRef = {ident("core-product")};')
 
-for name, isa, items in [("app-sources","PBXSourcesBuildPhase",app_builds),("test-sources","PBXSourcesBuildPhase",test_builds),("app-resources","PBXResourcesBuildPhase",["build-assets","build-privacy"]),("test-resources","PBXResourcesBuildPhase",[]),("app-frameworks","PBXFrameworksBuildPhase",["build-core"]),("test-frameworks","PBXFrameworksBuildPhase",[])]:
+for name, isa, items in [("app-sources","PBXSourcesBuildPhase",app_builds),("test-sources","PBXSourcesBuildPhase",test_builds),("app-resources","PBXResourcesBuildPhase",resource_builds),("test-resources","PBXResourcesBuildPhase",[]),("app-frameworks","PBXFrameworksBuildPhase",["build-core"]),("test-frameworks","PBXFrameworksBuildPhase",[])]:
     obj(name,isa,f"buildActionMask = 2147483647; files = {refs(items)} runOnlyForDeploymentPostprocessing = 0;")
 
 obj("app-proxy","PBXContainerItemProxy",f'containerPortal = {ident("project")}; proxyType = 1; remoteGlobalIDString = {ident("app-target")}; remoteInfo = Takt;')
@@ -72,7 +82,7 @@ for scope in ["project","app","test"]:
         }
         settings["ONLY_ACTIVE_ARCH"] = "YES" if config == "Debug" else "NO"
         if scope != "project":
-            settings.update({"PRODUCT_NAME":"$(TARGET_NAME)","PRODUCT_BUNDLE_IDENTIFIER":"ch.takt.transitworld" if scope == "app" else "ch.takt.transitworld.uitests", "CODE_SIGN_STYLE":"Automatic", "TARGETED_DEVICE_FAMILY":"1,2", "MARKETING_VERSION":"0.2.0", "CURRENT_PROJECT_VERSION":"2", "LD_RUNPATH_SEARCH_PATHS":"$(inherited) @executable_path/Frameworks"})
+            settings.update({"PRODUCT_NAME":"$(TARGET_NAME)","PRODUCT_BUNDLE_IDENTIFIER":"ch.takt.transitworld" if scope == "app" else "ch.takt.transitworld.uitests", "CODE_SIGN_STYLE":"Automatic", "TARGETED_DEVICE_FAMILY":"1,2", "MARKETING_VERSION":"0.3.0", "CURRENT_PROJECT_VERSION":"3", "LD_RUNPATH_SEARCH_PATHS":"$(inherited) @executable_path/Frameworks"})
         if scope == "app":
             settings.update({"INFOPLIST_FILE":"Takt/Info.plist","ASSETCATALOG_COMPILER_APPICON_NAME":"AppIcon", "SUPPORTS_MACCATALYST":"NO", "SUPPORTED_PLATFORMS":"iphoneos iphonesimulator"})
         if scope == "test":

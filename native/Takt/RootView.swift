@@ -2,225 +2,220 @@ import SwiftUI
 import UniformTypeIdentifiers
 import TaktCore
 
-enum GameTab: String, CaseIterable {
-    case city, lines, fleet, world, quests
-    var title: String { switch self { case .city: return "Stadt"; case .lines: return "Linien"; case .fleet: return "Flotte"; case .world: return "Welt"; case .quests: return "Aufgaben" } }
-    var symbol: String { switch self { case .city: return "map.fill"; case .lines: return "point.topleft.down.to.point.bottomright.curvepath"; case .fleet: return "bus"; case .world: return "globe.europe.africa.fill"; case .quests: return "flag.checkered" } }
-}
 private enum GameSheet: Identifiable {
-    case settings, route(String)
-    var id: String { switch self { case .settings: return "settings"; case .route(let id): return id } }
+    case settings, lines, fleet, world, quests, route(String)
+    var id: String {
+        switch self {
+        case .settings: return "settings"
+        case .lines: return "lines"
+        case .fleet: return "fleet"
+        case .world: return "world"
+        case .quests: return "quests"
+        case .route(let id): return "route-" + id
+        }
+    }
+    var title: String {
+        switch self {
+        case .settings: return "Einstellungen"
+        case .lines: return "Dein Liniennetz"
+        case .fleet: return "Deine Flotte"
+        case .world: return "Deine Städte"
+        case .quests: return "Deine Aufgaben"
+        case .route(let id): return "Linie \(Catalog.route(id)?.number ?? id)"
+        }
+    }
 }
 
 struct RootView: View {
     @EnvironmentObject private var game: GameStore
-    @State private var tab: GameTab = .city
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var sheet: GameSheet?
+    @State private var cameraCommand = CameraCommand()
+    @State private var sheetDetent: PresentationDetent = .large
+
+    private var compact: Bool { verticalSizeClass == .compact }
+    private var cameraLayout: AnyLayout {
+        compact ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
+    }
+
     var body: some View {
-        TabView(selection: $tab) {
-            ForEach(GameTab.allCases, id: \.self) { item in
-                NavigationStack {
-                    content(for: item)
-                        .background(TaktTheme.background)
-                        .toolbar {
-                            ToolbarItem(placement: .topBarLeading) {
-                                HStack(spacing: 2) {
-                                    Text("takt").font(.system(size: 28, weight: .heavy, design: .rounded))
-                                    Text(".").font(.system(size: 28, weight: .heavy, design: .rounded)).foregroundStyle(TaktTheme.coral)
-                                    Text("DEIN NETZ.").font(.system(size: 8, weight: .semibold)).tracking(1.4).foregroundStyle(TaktTheme.muted).padding(.leading, 10)
-                                }.foregroundStyle(TaktTheme.ink).accessibilityElement(children: .ignore).accessibilityLabel("Takt. Dein Verkehrsnetz.")
-                            }
-                            ToolbarItem(placement: .topBarTrailing) {
-                                Button { sheet = .settings } label: { Image(systemName: "slider.horizontal.3").frame(width: 36, height: 36) }
-                                    .accessibilityLabel("Einstellungen").accessibilityIdentifier("settings")
-                            }
-                        }
-                        .toolbarBackground(TaktTheme.background, for: .navigationBar)
-                        .navigationBarTitleDisplayMode(.inline)
-                }
-                .tabItem { Label(item.title, systemImage: item.symbol) }
-                .tag(item)
-                .badge(item == .quests ? game.readyCount : 0)
+        ZStack {
+            NativeCityView(state: game.state, speed: game.active ? game.speed : 0,
+                           cameraCommand: cameraCommand, selectedRoute: game.selectedRoute,
+                           onSelect: { id in game.selectedRoute = id; sheet = .route(id) })
+                .ignoresSafeArea()
+            VStack(spacing: 10) {
+                topControls
+                Spacer(minLength: 0)
+                bottomControls
             }
+            .padding(.horizontal, compact ? 18 : 16)
+            .padding(.top, 10).padding(.bottom, 10)
         }
         .foregroundStyle(TaktTheme.ink)
-        .overlay(alignment: .top) {
-            if let text = game.message {
-                HStack(spacing: 10) {
-                    Image(systemName: "sparkles").foregroundStyle(TaktTheme.coral)
-                    Text(text).font(.subheadline.weight(.medium))
-                    Button { withAnimation { game.message = nil } } label: { Image(systemName: "xmark").frame(width: 30, height: 35) }.accessibilityLabel("Meldung schliessen")
-                }
-                .padding(.leading, 17).padding(.trailing, 7).padding(.vertical, 10)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
-                .overlay(RoundedRectangle(cornerRadius: 18).stroke(TaktTheme.border))
-                .shadow(color: .black.opacity(0.08), radius: 15, y: 5)
-                .padding(.horizontal, 16).padding(.top, 4)
-                .transition(.move(edge: .top).combined(with: .opacity))
-                .accessibilityIdentifier("game-notification")
-            }
+        .tint(TaktTheme.green)
+        .overlay(alignment: .trailing) {
+            cameraLayout {
+                hudIcon("plus", "Vergrössern", "zoom-in") { cameraCommand = .init(action: .zoomIn) }
+                if !compact { Divider().frame(width: 24) }
+                hudIcon("minus", "Verkleinern", "zoom-out") { cameraCommand = .init(action: .zoomOut) }
+                if !compact { Divider().frame(width: 24) }
+                hudIcon("arrow.up.left.and.arrow.down.right", "Ganze Stadt", "city-overview") { cameraCommand = .init(action: .reset) }
+            }.hudSurface().padding(.trailing, compact ? 18 : 16)
         }
         .sheet(item: $sheet) { destination in
-            switch destination {
-            case .settings: SettingsPage()
-            case .route(let id):
-                if let route = Catalog.route(id) {
-                    NavigationStack {
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 20) {
-                                RouteCard(route: route, onView: nil)
-                                Card {
-                                    VStack(alignment: .leading, spacing: 18) {
-                                        Eyebrow(text: "Deine feste Strecke")
-                                        ForEach(Array(route.stopNames(in: game.state.cityID).enumerated()), id: \.offset) { _, name in
-                                            Label(name, systemImage: "circle.inset.filled").foregroundStyle(Color(hex: route.colorHex))
-                                        }
-                                    }.frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                                if route.kind == .metro {
-                                    Text("Die Metro wird als transparente Untergrundansicht dargestellt, damit du ihre Bewegung sehen kannst.")
-                                        .font(.footnote).foregroundStyle(TaktTheme.muted)
-                                }
-                            }.padding(20)
-                        }.background(TaktTheme.background)
-                            .navigationTitle("Linie \(route.number)")
-                            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fertig") { sheet = nil } } }
-                    }.presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
+            if case .settings = destination {
+                SettingsPage().presentationDetents([.large]).presentationDragIndicator(.visible)
+            } else {
+                NavigationStack {
+                    sheetContent(destination)
+                        .background(TaktTheme.background)
+                        .navigationTitle(destination.title).navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Fertig") { sheet = nil }.accessibilityIdentifier("close-sheet")
+                            }
+                        }
                 }
+                .presentationDetents([.medium, .large], selection: $sheetDetent)
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(28)
+                .tint(TaktTheme.green)
             }
         }
     }
-    @ViewBuilder private func content(for tab: GameTab) -> some View {
-        switch tab {
-        case .city: CityPage(openLines: { self.tab = .lines }, openWorld: { self.tab = .world }, openQuests: { self.tab = .quests }, inspect: { id in game.selectedRoute = id; sheet = .route(id) })
-        case .lines: LinesPage { id in game.selectedRoute = id; self.tab = .city }
+
+    private var topControls: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 7) {
+                Button { sheet = .world } label: {
+                    HStack(spacing: 7) {
+                        Text(game.state.currentCity.name).font(.system(.headline, design: .rounded, weight: .bold))
+                            .lineLimit(1).minimumScaleFactor(0.7)
+                        Image(systemName: "chevron.down").font(.caption2.bold())
+                    }
+                    .frame(minHeight: 44)
+                }.accessibilityIdentifier("current-city").accessibilityHint("Städte entdecken und wechseln")
+                HStack(spacing: 6) {
+                    Image(systemName: "circle.circle.fill").foregroundStyle(TaktTheme.gold)
+                    Text(game.state.coins.taktNumber).monospacedDigit().fontWeight(.bold)
+                    if !dynamicTypeSize.isAccessibilitySize {
+                        Text("+\(game.state.income.taktNumber)/Min.").foregroundStyle(TaktTheme.muted)
+                    }
+                }.font(.caption)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Guthaben \(game.state.coins) Münzen, \(game.state.income) pro Minute")
+                    .accessibilityIdentifier("wallet")
+            }.padding(.horizontal, 14).padding(.vertical, 8).hudSurface()
+            Spacer(minLength: 0)
+            HStack(spacing: 8) {
+                hudIcon("flag.checkered", "Aufgaben", "open-quests") { sheet = .quests }
+                    .hudSurface()
+                    .overlay(alignment: .topTrailing) {
+                        if game.readyCount > 0 {
+                            Text("\(game.readyCount)").font(.caption2.bold()).foregroundStyle(.white)
+                                .padding(5).background(TaktTheme.coral, in: Circle()).offset(x: 4, y: -4)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .accessibilityValue("\(game.readyCount) Belohnungen bereit")
+                hudIcon("slider.horizontal.3", "Einstellungen", "settings") { sheet = .settings }.hudSurface()
+            }
+        }
+    }
+
+    private var bottomControls: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let text = game.message {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkles").foregroundStyle(TaktTheme.coral)
+                    Text(text).font(.caption.weight(.medium))
+                    Button { game.message = nil } label: { Image(systemName: "xmark").frame(width: 44, height: 44) }
+                        .accessibilityLabel("Meldung schliessen")
+                }.padding(.leading, 12).hudSurface().accessibilityIdentifier("game-notification")
+            }
+            if let event = game.state.event {
+                Label("\(event.title) · +50 % · \(max(0, Int(event.endsAt - game.state.seconds))) s", systemImage: "bolt.fill")
+                    .font(.caption.weight(.semibold)).padding(10).hudSurface()
+            }
+            HStack(alignment: .bottom) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Button { sheet = .fleet } label: {
+                        Label("Flotte", systemImage: "bus.fill").font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 14).frame(minHeight: 48)
+                    }.hudSurface().accessibilityIdentifier("open-fleet")
+                    HStack(spacing: 0) {
+                        hudIcon(game.speed == 0 ? "play.fill" : "pause.fill", game.speed == 0 ? "Fortsetzen" : "Pausieren", "toggle-speed") {
+                            game.speed = game.speed == 0 ? 1 : 0
+                        }
+                        Button { game.speed = game.speed >= 3 ? 1 : max(1, game.speed + 1) } label: {
+                            Text("\(Int(max(1, game.speed)))×").font(.subheadline.bold()).monospacedDigit().frame(width: 44, height: 48)
+                        }.accessibilityLabel("Geschwindigkeit ändern").accessibilityValue("\(Int(game.speed))-fach")
+                            .accessibilityIdentifier("cycle-speed")
+                    }.hudSurface()
+                }
+                Spacer(minLength: 12)
+                VStack(alignment: .trailing, spacing: 8) {
+                    Button { game.changeSettings { $0.night.toggle() } } label: {
+                        Image(systemName: game.state.settings.night ? "moon.stars.fill" : "sun.max.fill")
+                            .font(.system(size: 18, weight: .medium)).frame(width: 48, height: 48)
+                    }.hudSurface().accessibilityLabel(game.state.settings.night ? "Nachtmodus" : "Tagesmodus")
+                        .accessibilityHint("Tag oder Nacht wechseln").accessibilityIdentifier("city-lighting")
+                    Button { sheet = .lines } label: {
+                        Label(dynamicTypeSize.isAccessibilitySize ? "Linie" : "Linie freischalten", systemImage: "plus")
+                            .font(.system(.subheadline, design: .rounded, weight: .bold))
+                            .padding(.horizontal, 18).frame(minHeight: 56)
+                            .foregroundStyle(.white).background(TaktTheme.green, in: RoundedRectangle(cornerRadius: 20))
+                            .overlay(RoundedRectangle(cornerRadius: 20).stroke(.white.opacity(0.25)))
+                            .shadow(color: TaktTheme.ink.opacity(0.18), radius: 14, y: 5)
+                    }.accessibilityLabel("Linie freischalten").accessibilityIdentifier("open-lines")
+                }
+            }
+            if !compact && !dynamicTypeSize.isAccessibilitySize {
+                Text("Wischen zum Erkunden · Zwei Finger zum Zoomen")
+                    .font(.caption2).foregroundStyle(TaktTheme.ink)
+                    .padding(.horizontal, 10).padding(.vertical, 6).hudSurface()
+                    .frame(maxWidth: .infinity).allowsHitTesting(false)
+            }
+        }
+    }
+
+    private func hudIcon(_ symbol: String, _ label: String, _ identifier: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 18, weight: .semibold)).frame(width: 48, height: 48)
+        }.accessibilityLabel(label).accessibilityIdentifier(identifier)
+    }
+
+    @ViewBuilder private func sheetContent(_ destination: GameSheet) -> some View {
+        switch destination {
+        case .lines:
+            LinesPage { id in game.selectedRoute = id; cameraCommand = .init(action: .focusRoute(id)); sheet = nil }
         case .fleet: FleetPage()
-        case .world: WorldPage { self.tab = .city }
+        case .world: WorldPage { sheet = nil }
         case .quests: QuestsPage()
+        case .settings: EmptyView()
+        case .route(let id):
+            if let route = Catalog.route(id) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        RouteCard(route: route, onView: { cameraCommand = .init(action: .focusRoute(id)); sheet = nil })
+                        Card {
+                            VStack(alignment: .leading, spacing: 18) {
+                                Eyebrow(text: "Deine feste Strecke")
+                                ForEach(Array(route.stopNames(in: game.state.cityID).enumerated()), id: \.offset) { _, name in
+                                    Label(name, systemImage: "circle.inset.filled").foregroundStyle(Color(hex: route.colorHex))
+                                }
+                            }.frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        if route.kind == .metro {
+                            Text("Die Metro wird als transparente Untergrundansicht dargestellt, damit du ihre Bewegung sehen kannst.")
+                                .font(.footnote).foregroundStyle(TaktTheme.muted)
+                        }
+                    }.padding(20)
+                }
+            }
         }
-    }
-}
-
-struct CityPage: View {
-    @EnvironmentObject private var game: GameStore
-    @State private var cameraCommand = CameraCommand()
-    let openLines: () -> Void
-    let openWorld: () -> Void
-    let openQuests: () -> Void
-    let inspect: (String) -> Void
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                HStack(alignment: .center) {
-                    VStack(alignment: .leading, spacing: 7) {
-                        Eyebrow(text: "Deine kleine grosse Welt")
-                        Button(action: openWorld) {
-                            HStack(spacing: 8) {
-                                Text(game.state.currentCity.name).font(.system(size: 32, weight: .bold, design: .rounded)).minimumScaleFactor(0.65).lineLimit(1)
-                                Image(systemName: "chevron.down").font(.caption.weight(.bold))
-                            }
-                        }.foregroundStyle(TaktTheme.ink).accessibilityIdentifier("current-city")
-                        Text("Einsteigen. Verbinden. Weiterdenken.").font(.caption).foregroundStyle(TaktTheme.muted)
-                    }
-                    Spacer(minLength: 10)
-                    VStack(alignment: .trailing, spacing: 6) {
-                        Label(game.state.coins.taktNumber, systemImage: "circle.circle.fill")
-                            .font(.system(.title3, design: .rounded, weight: .bold)).monospacedDigit().foregroundStyle(Color(hex: 0xB99745))
-                            .accessibilityLabel("Guthaben \(game.state.coins) Münzen").accessibilityIdentifier("wallet")
-                        Text("+\(game.state.income.taktNumber)/Min.").font(.caption2.weight(.medium)).foregroundStyle(TaktTheme.green)
-                    }
-                }
-                ZStack(alignment: .bottom) {
-                    NativeCityView(state: game.state, speed: game.active ? game.speed : 0, cameraCommand: cameraCommand, selectedRoute: game.selectedRoute, onSelect: inspect)
-                        .accessibilityLabel("Animierte Stadt. Mit einem Finger drehen, mit zwei Fingern zoomen. Fahrzeuge antippen für Details.")
-                        .accessibilityIdentifier("native-city")
-                    VStack {
-                        HStack {
-                            HStack(spacing: 6) { Circle().fill(TaktTheme.green).frame(width: 6, height: 6); Eyebrow(text: game.speed == 0 ? "Zeit zum Durchatmen" : "Deine Stadt lebt", color: game.state.settings.night ? .white.opacity(0.8) : TaktTheme.muted) }
-                            Spacer()
-                            Label("Tag \(Int(game.state.seconds / 240) + 1)", systemImage: game.state.settings.night ? "moon.stars.fill" : "sun.max.fill")
-                                .font(.caption2.weight(.medium)).foregroundStyle(game.state.settings.night ? .white.opacity(0.8) : TaktTheme.muted)
-                                .accessibilityLabel(game.state.settings.night ? "Nachtmodus" : "Tagesmodus").accessibilityIdentifier("city-lighting")
-                        }
-                        if let event = game.state.event {
-                            HStack { Image(systemName: "bolt.fill"); Text("\(event.title) +50 % Einnahmen"); Spacer(); Text("\(max(0,Int(event.endsAt-game.state.seconds))) s").monospacedDigit() }
-                                .font(.caption2.weight(.medium)).padding(10).background(Color(hex: 0xF6E8BD), in: Capsule())
-                        }
-                        Spacer()
-                        HStack {
-                            Spacer()
-                            VStack(spacing: 0) {
-                                mapButton("plus", "Vergrössern") { cameraCommand = .init(action: .zoomIn) }
-                                mapButton("minus", "Verkleinern") { cameraCommand = .init(action: .zoomOut) }
-                                Divider().frame(width: 25)
-                                mapButton("arrow.up.left.and.arrow.down.right", "Kamera zurücksetzen") { cameraCommand = .init(action: .reset) }
-                                mapButton(game.state.settings.night ? "sun.max" : "moon", "Tag oder Nacht wechseln") { game.changeSettings { $0.night.toggle() } }
-                            }.background(.regularMaterial, in: RoundedRectangle(cornerRadius: 15))
-                        }
-                        Spacer()
-                        HStack {
-                            Label(game.state.currentCity.country, systemImage: "location").font(.caption2).foregroundStyle(game.state.settings.night ? .white.opacity(0.7) : TaktTheme.muted)
-                            Spacer()
-                            Text("\(game.state.currentLines.count) Linien aktiv").font(.caption2).foregroundStyle(game.state.settings.night ? .white.opacity(0.7) : TaktTheme.muted)
-                        }
-                        Button(action: openLines) { Label("Linie freischalten", systemImage: "plus") }
-                            .buttonStyle(TaktButtonStyle()).accessibilityIdentifier("open-lines")
-                    }.padding(17)
-                }
-                .frame(height: 420)
-                .clipShape(RoundedRectangle(cornerRadius: 25))
-                .overlay(RoundedRectangle(cornerRadius: 25).stroke(TaktTheme.border))
-
-                HStack(spacing: 12) {
-                    MetricCard(symbol: "person.2.fill", title: "Fahrgäste", value: game.state.passengers.taktNumber, color: TaktTheme.green)
-                    MetricCard(symbol: "sparkles", title: "Netz-Pionier", value: "Level \(game.state.level)", color: TaktTheme.coral)
-                }
-
-                if let quest = game.openQuests.first(where: \.ready) ?? game.openQuests.first {
-                    QuestSpotlight(quest: quest, openQuests: openQuests)
-                }
-                VStack(alignment: .leading, spacing: 11) {
-                    HStack { Text("Deine Verbindungen").font(.title3.weight(.semibold)); Spacer(); Button("Alle Linien", action: openLines).font(.subheadline) }
-                    ForEach(game.state.currentLines) { line in
-                        if let route = Catalog.route(line.id) {
-                            Button { inspect(line.id) } label: {
-                                HStack(spacing: 12) {
-                                    SoftIcon(name: route.kind.symbol, color: Color(hex: route.colorHex))
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("\(route.number)  \(route.stopNames(in: game.state.cityID).first!)").font(.subheadline.weight(.semibold))
-                                        Text("\(route.stopNames(in: game.state.cityID).last!) · \(line.tier) Fzg.").font(.caption).foregroundStyle(TaktTheme.muted)
-                                    }
-                                    Spacer(); Image(systemName: "chevron.right").font(.caption).foregroundStyle(TaktTheme.muted)
-                                }.padding(12).background(TaktTheme.paper, in: RoundedRectangle(cornerRadius: 16))
-                            }.buttonStyle(.plain)
-                        }
-                    }
-                }
-                HStack {
-                    Eyebrow(text: "Dein Takt")
-                    Spacer()
-                    Button { game.speed = game.speed == 0 ? 1 : 0 } label: { Image(systemName: game.speed == 0 ? "play.fill" : "pause.fill").frame(width: 40, height: 44) }.accessibilityLabel(game.speed == 0 ? "Fortsetzen" : "Pausieren")
-                    ForEach([1,2,3], id: \.self) { speed in
-                        Button("\(speed)×") { game.speed = Double(speed) }
-                            .font(.subheadline.weight(.semibold)).frame(width: 37, height: 38)
-                            .background(game.speed == Double(speed) ? TaktTheme.pale : .clear, in: RoundedRectangle(cornerRadius: 9))
-                            .accessibilityLabel("\(speed)-fache Geschwindigkeit")
-                    }
-                }
-                Text("Kleine Wege. Grosse Geschichten.").font(.caption).foregroundStyle(TaktTheme.muted).frame(maxWidth: .infinity).padding(.bottom, 8)
-            }.padding(.horizontal, 20).padding(.top, 12)
-        }
-    }
-    private func mapButton(_ symbol: String, _ label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Image(systemName: symbol).font(.system(size: 17, weight: .medium)).frame(width: 42, height: 43) }.accessibilityLabel(label)
-    }
-}
-
-private struct MetricCard: View {
-    let symbol: String; let title: String; let value: String; let color: Color
-    var body: some View {
-        HStack(spacing: 10) { SoftIcon(name: symbol, color: color); VStack(alignment: .leading, spacing: 4) { Text(title).font(.caption).foregroundStyle(TaktTheme.muted); Text(value).font(.system(.headline, design: .rounded)).monospacedDigit() }; Spacer(minLength: 0) }
-            .padding(12).frame(maxWidth: .infinity).background(TaktTheme.paper, in: RoundedRectangle(cornerRadius: 17))
     }
 }
 
@@ -244,7 +239,7 @@ struct QuestSpotlight: View {
 
 struct PageHeading: View {
     let eyebrow: String; let title: String; let detail: String
-    var body: some View { VStack(alignment: .leading, spacing: 10) { Eyebrow(text: eyebrow); Text(title).font(.system(size: 29, weight: .bold, design: .rounded)); Text(detail).font(.subheadline).foregroundStyle(TaktTheme.muted).lineSpacing(3) }.frame(maxWidth: .infinity, alignment: .leading) }
+    var body: some View { VStack(alignment: .leading, spacing: 10) { Eyebrow(text: eyebrow); Text(title).font(.system(.title, design: .rounded, weight: .bold)); Text(detail).font(.subheadline).foregroundStyle(TaktTheme.muted).lineSpacing(3) }.frame(maxWidth: .infinity, alignment: .leading) }
 }
 struct WalletStrip: View {
     @EnvironmentObject private var game: GameStore
@@ -305,6 +300,7 @@ struct RouteCard: View {
                     Circle().fill(Color(hex: route.colorHex)).frame(width: 7, height: 7)
                 }
                 Text(stops.joined(separator: " · ")).font(.caption).foregroundStyle(TaktTheme.muted)
+                Text(route.spatialNote(in: game.state.cityID)).font(.caption2).foregroundStyle(TaktTheme.muted)
                 HStack(spacing: 13) {
                     Label("\(stops.count) Stopps", systemImage: "mappin")
                     Label("\(route.capacity * (own?.tier ?? 1))/Fahrt", systemImage: "person.2")
@@ -313,7 +309,7 @@ struct RouteCard: View {
                 }.font(.caption2).foregroundStyle(TaktTheme.muted)
                 if let own {
                     HStack(spacing: 10) {
-                        if let onView { Button(action: onView) { Image(systemName: "location.fill").frame(width: 45, height: 46).background(TaktTheme.pale, in: RoundedRectangle(cornerRadius: 12)) }.accessibilityLabel("Linie \(route.number) in der Stadt ansehen") }
+                        if let onView { Button(action: onView) { Image(systemName: "location.fill").frame(width: 45, height: 46).background(TaktTheme.pale, in: RoundedRectangle(cornerRadius: 12)) }.accessibilityLabel("Linie \(route.number) in der Stadt ansehen").accessibilityIdentifier("view-\(route.id)") }
                         Button { game.perform(.upgrade(route.id)) } label: {
                             HStack { Image(systemName: own.tier == 5 ? "checkmark" : "plus"); Text(own.tier == 5 ? "Voll ausgebaut" : "Fahrzeug"); Spacer(); if own.tier < 5 { Text("\(route.upgradePrice(tier: own.tier).taktNumber) ₮").monospacedDigit() } }.padding(.horizontal, 13)
                         }.buttonStyle(TaktButtonStyle()).disabled(own.tier == 5 || game.state.coins < route.upgradePrice(tier: own.tier)).opacity(own.tier == 5 || game.state.coins < route.upgradePrice(tier: own.tier) ? 0.45 : 1).accessibilityIdentifier("upgrade-\(route.id)")
@@ -345,6 +341,7 @@ struct QuestsPage: View {
                         }
                     }
                 }
+                Label("\(game.state.passengers.taktNumber) Fahrgäste befördert", systemImage: "person.2.fill").font(.subheadline).foregroundStyle(TaktTheme.green)
                 Picker("Aufgaben", selection: $done) { Text("In Arbeit").tag(false); Text("Geschafft").tag(true) }.pickerStyle(.segmented)
                 ForEach(game.quests.filter { game.state.claimed.contains($0.id) == done }) { quest in
                     Card {
@@ -381,7 +378,7 @@ struct FleetPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 PageHeading(eyebrow: "Dein Fuhrpark", title: "Was bewegt dich?", detail: "Vom Quartierbus bis zum Flugzeug. Neue Level eröffnen neue Wege.")
-                LazyVGrid(columns: [GridItem(.flexible()),GridItem(.flexible())], spacing: 14) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 145))], spacing: 14) {
                     ForEach(VehicleKind.allCases) { kind in
                         Button { chosen = kind } label: {
                             VStack(alignment: .leading, spacing: 11) {
@@ -495,13 +492,18 @@ struct SettingsPage: View {
                     helpRow("1", "Linien kaufen", "Dein erster Bus fährt schon. Kaufe weitere feste Strecken im Liniennetz.")
                     helpRow("2", "Aufgaben abholen", "Für Meilensteine erhältst du Münzen und XP. Hole sie unter Aufgaben ab.")
                     helpRow("3", "Weiter wachsen", "Neue Level eröffnen Verkehrsmittel und Städte. Zusätzliche Fahrzeuge verdienen mehr.")
-                    helpRow("4", "Die Stadt entdecken", "Mit einem Finger drehen, mit zwei Fingern zoomen. Tippe ein Fahrzeug für Details an.")
+                    helpRow("4", "Die Stadt entdecken", "Mit einem Finger verschieben, mit zwei Fingern zoomen oder drehen. Ganze Stadt bringt dich zur Übersicht. Tippe ein Fahrzeug für Details an.")
+                }
+                Section("Karte und Daten") {
+                    Text("Zürich: Stadt Zürich, amtliche Vermessung (CCZero). Gebäudehöhen sind schematisch, nicht vermessen. Verkehrswege sind für das Spiel vereinfacht; erfundene Verbindungen sind bei der Linie gekennzeichnet. Andere Städte sind stilisierte Miniaturwelten.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    Link("Geodaten der Stadt Zürich", destination: URL(string: "https://data.stadt-zuerich.ch/dataset/geo_amtliche_vermessung_stadt_zuerich")!)
                 }
                 Section { Button("Spielstand zurücksetzen", role: .destructive) { confirmReset = true }.accessibilityIdentifier("reset-game") }
                 Section { HStack { Text("takt.").font(.title.bold()); Spacer(); Text("Swift · Version 0.2.0").font(.caption).foregroundStyle(.secondary) } }
             }
             .navigationTitle("Ganz in deinem Takt.").navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fertig") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fertig") { dismiss() }.accessibilityIdentifier("close-sheet") } }
             .confirmationDialog("Deinen gesamten Spielstand löschen?", isPresented: $confirmReset, titleVisibility: .visible) {
                 Button("Neu in Zürich anfangen", role: .destructive) { game.reset(); dismiss() }
                 Button("Behalten", role: .cancel) {}

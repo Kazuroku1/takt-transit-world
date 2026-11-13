@@ -76,8 +76,23 @@ public struct TransitRoute: Identifiable, Sendable {
         Int((Double(capacity * tier * fare) * 60 / duration).rounded())
     }
     public func stopNames(in cityID: String) -> [String] {
+        if cityID == "zurich", let names = ZurichRouteGeometry.stops[id] { return names }
         guard let names = Catalog.terminals[cityID], let index = Catalog.routes.firstIndex(where: { $0.id == id }) else { return stops }
         return stops.indices.map { names[(index + $0) % names.count] }
+    }
+    public func points(in cityID: String) -> [MapPoint] {
+        cityID == "zurich" ? (ZurichRouteGeometry.paths[id] ?? points) : points
+    }
+    public func spatialNote(in cityID: String) -> String {
+        guard cityID == "zurich" else { return "Stilisierte Spielstadt mit festgelegten Strecken." }
+        switch kind {
+        case .bus, .tram: return "Amtlicher Linienverlauf, für das Spiel vereinfacht. Die Fahrzeuge pendeln auf einer Fahrtrichtung; gezeigt sind die Endhaltestellen."
+        case .train: return "Amtlicher S12-Verlauf im Kartenausschnitt, vereinfacht. Ausgewählte Haltestellen; Tunnel werden sichtbar dargestellt."
+        case .ship: return "Spielerisch angenäherte Seestrecke zwischen realen Anlegestellen."
+        case .metro: return "Fiktive Erweiterung: Zürich hat keine Metro. Diese Strecke gehört zu deinem Spielnetz."
+        case .cable: return "Fiktive Seilbahn für dein Spielnetz; kein reales Verkehrsangebot."
+        case .plane: return "Fiktiver Stadtflugplatz und Flugkorridor für die Weltverbindung."
+        }
     }
 }
 

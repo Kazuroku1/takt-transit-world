@@ -4,7 +4,7 @@ import UIKit
 import TaktCore
 
 struct CameraCommand: Equatable {
-    enum Action { case reset, zoomIn, zoomOut }
+    enum Action: Equatable { case reset, zoomIn, zoomOut, focusRoute(String) }
     let id = UUID()
     var action: Action = .reset
 }
@@ -20,7 +20,10 @@ struct NativeCityView: UIViewRepresentable {
     func makeCoordinator() -> CityRenderer { CityRenderer() }
     func makeUIView(context: Context) -> ARView {
         let view = ARView(frame: .zero, cameraMode: .nonAR, automaticallyConfigureSession: false)
-        view.accessibilityIdentifier = "realitykit-canvas"
+        view.accessibilityIdentifier = "native-city"
+        view.accessibilityLabel = "Stadtkarte"
+        view.accessibilityHint = "Mit einem Finger verschieben, mit zwei Fingern zoomen und drehen."
+        view.isAccessibilityElement = true
         context.coordinator.attach(view)
         context.coordinator.update(state: state, speed: speed, command: cameraCommand, selected: selectedRoute, onSelect: onSelect)
         return view
@@ -32,8 +35,9 @@ struct NativeCityView: UIViewRepresentable {
 }
 
 @MainActor
-final class CityRenderer: NSObject {
+final class CityRenderer: NSObject, UIGestureRecognizerDelegate {
     private weak var view: ARView?
+    private weak var loadingLabel: UILabel?
     private let anchor = AnchorEntity(world: .zero)
     private let camera = PerspectiveCamera()
     private let sun = DirectionalLight()
@@ -58,6 +62,14 @@ final class CityRenderer: NSObject {
     private var target = SIMD3<Float>(0,0,0)
     private var startYaw: Float = 0
     private var startPitch: Float = 0
+    private var startTarget = SIMD3<Float>.zero
+    private var mapTask: Task<Void, Never>?
+    private var mapTiles: [(Entity, SIMD2<Float>, Float)] = []
+    private var detailTiles: [(Entity, Entity, SIMD2<Float>)] = []
+    private var mapBounds: [Float] = [-75,-70,75,70]
+    private var mapStatus = ""
+    private var mapLabels: [(Entity, SIMD2<Float>)] = []
+    private var isZurich: Bool { cityID == "zurich" }
     private var startRadius: Float = 80
     private var night = false
     private var seed: UInt64 = 1234
@@ -70,11 +82,30 @@ final class CityRenderer: NSObject {
         let node: Entity
         let route: TransitRoute
         let phase: Double
+        let points: [MapPoint]
         let base: Float
     }
 
     func attach(_ view: ARView) {
         self.view = view
+        let loading = UILabel()
+        loading.translatesAutoresizingMaskIntoConstraints = false
+        loading.font = .systemFont(ofSize: 15, weight: .semibold)
+        loading.textColor = UIColor(hex: 0x425B51)
+        loading.backgroundColor = UIColor(hex: 0xF2EFDF).withAlphaComponent(0.95)
+        loading.layer.cornerRadius = 16
+        loading.clipsToBounds = true
+        loading.textAlignment = .center
+        loading.isUserInteractionEnabled = false
+        loading.isHidden = true
+        view.addSubview(loading)
+        NSLayoutConstraint.activate([
+            loading.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            loading.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            loading.widthAnchor.constraint(equalToConstant: 280),
+            loading.heightAnchor.constraint(equalToConstant: 52)
+        ])
+        loadingLabel = loading
         view.environment.background = .color(UIColor(hex: 0xE1E9D8))
         view.environment.lighting.intensityExponent = 0.5
         view.renderOptions.insert(.disableMotionBlur)
@@ -82,10 +113,12 @@ final class CityRenderer: NSObject {
         view.scene.addAnchor(anchor)
         anchor.addChild(town); anchor.addChild(traffic); anchor.addChild(camera)
         camera.camera.fieldOfViewInDegrees = 37
+        camera.camera.near = 0.01
+        camera.camera.far = 1300
         sun.light.color = UIColor(hex: 0xFFF3DB)
         sun.light.intensity = 2300
         var shadows = DirectionalLightComponent.Shadow()
-        shadows.maximumDistance = 110
+        shadows.maximumDistance = 180
         sun.shadow = shadows
         sun.look(at: .zero, from: SIMD3<Float>(-18,35,17), relativeTo: nil)
         fill.light.intensity = 850
@@ -95,7 +128,12 @@ final class CityRenderer: NSObject {
         let pan = UIPanGestureRecognizer(target: self, action: #selector(drag(_:)))
         pan.maximumNumberOfTouches = 1
         view.addGestureRecognizer(pan)
-        view.addGestureRecognizer(UIPinchGestureRecognizer(target: self, action: #selector(pinch(_:))))
+        let zoom = UIPinchGestureRecognizer(target: self, action: #selector(pinch(_:)))
+        zoom.delegate = self
+        view.addGestureRecognizer(zoom)
+        let rotation = UIRotationGestureRecognizer(target: self, action: #selector(rotate(_:)))
+        rotation.delegate = self
+        view.addGestureRecognizer(rotation)
         view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tap(_:))))
         updateCamera()
         let link = CADisplayLink(target: self, selector: #selector(frame(_:)))
@@ -109,12 +147,14 @@ final class CityRenderer: NSObject {
         self.onSelect = onSelect
         if state.cityID != cityID {
             cityID = state.cityID; time = state.seconds; signature = ""; self.selected = nil
+            mapTask?.cancel(); mapTiles.removeAll(); detailTiles.removeAll(); mapLabels.removeAll()
+            loadingLabel?.isHidden = true
             town.children.removeAll(); traffic.children.removeAll(); people.removeAll(); boats.removeAll()
             dayWindows.children.removeAll(); nightWindows.children.removeAll()
             town.addChild(dayWindows); town.addChild(nightWindows)
             seed = state.cityID.utf8.reduce(UInt64(1234)) { $0 &* 31 &+ UInt64($1) }
             buildTown(city: state.currentCity)
-            target = .zero; radius = 80; yaw = 0.75; pitch = 0.62
+            target = isZurich ? [0,0,4] : .zero; radius = isZurich ? 32 : 80; yaw = 0.12; pitch = 0.95
             updateCamera()
         }
         if night != state.settings.night || signature.isEmpty {
@@ -134,25 +174,33 @@ final class CityRenderer: NSObject {
             signature = newSignature
             buildTraffic(lines: state.currentLines, selected: selected)
         }
-        if selected != self.selected {
-            self.selected = selected
-            if let selected, let route = Catalog.route(selected) {
-                let middle = route.points[route.points.count / 2]
-                target = SIMD3<Float>(Float(middle.x),0,Float(middle.z)); radius = 49; updateCamera()
-            }
-        }
+        self.selected = selected
         if command.id != commandID {
+            let firstCommand = commandID == nil
             commandID = command.id
             switch command.action {
-            case .reset: target = .zero; radius = 80; yaw = 0.75; pitch = 0.62
-            case .zoomIn: radius = max(25,radius - 8)
-            case .zoomOut: radius = min(105,radius + 8)
+            case .reset:
+                if !firstCommand {
+                    target = isZurich ? SIMD3<Float>((mapBounds[0]+mapBounds[2])/2,0,(mapBounds[1]+mapBounds[3])/2) : .zero
+                    radius = isZurich ? overviewRadius() : 80
+                    yaw = 0; pitch = 1.1
+                }
+            case .zoomIn: radius = max(isZurich ? 5 : 25,radius * 0.76)
+            case .zoomOut: radius = min(isZurich ? 620 : 105,radius / 0.76)
+            case .focusRoute(let id):
+                if let route = Catalog.route(id) {
+                    let points = route.points(in: cityID)
+                    let point = points[points.count / 2]
+                    target = [Float(point.x),0,Float(point.z)]
+                    radius = isZurich ? 18 : 49
+                }
             }
             updateCamera()
         }
     }
 
     func stop() {
+        mapTask?.cancel(); mapTask = nil
         displayLink?.invalidate(); displayLink = nil
         anchor.removeFromParent()
         vehicles.removeAll(); people.removeAll(); boats.removeAll()
@@ -195,6 +243,8 @@ final class CityRenderer: NSObject {
     }
 
     private func buildTown(city: TransitCity) {
+        if city.id == "zurich" { loadZurich(); return }
+        mapStatus = "Stilisierte Stadt"
         box([32,0.65,28],0xC8B799,[0,-0.4,0],round: 0.25)
         box([32,0.18,28],0xB5C99A,[0,0.01,0],round: 0.2)
         box([3.8,0.12,28],0x83C5CD,[7.8,0.12,0])
@@ -257,6 +307,218 @@ final class CityRenderer: NSObject {
         for i in 0..<12 {
             let ripple = box([0.25+random()*0.3,0.01,0.035],0xB9DFD8,[6.5+random()*2.6,0.19,Float(i)*2-12])
             boats.append(ripple)
+        }
+    }
+
+    // Official survey geometry is triangulated offline; each tile/material is one
+    // draw entity, rather than tens of thousands of individual building entities.
+    private struct RenderMap: Decodable, Sendable {
+        struct Tile: Decodable, Sendable {
+            struct Mesh: Decodable, Sendable {
+                let kind: String
+                let positions: [Float]
+                let indices: [UInt32]
+            }
+            let id: String
+            let bounds: [Float]
+            let meshes: [Mesh]
+        }
+        struct Label: Decodable, Sendable { let name: String; let x: Float; let z: Float }
+        let labels: [Label]
+        let tiles: [Tile]
+    }
+
+    private func loadZurich() {
+        mapStatus = "Stadtkarte wird geladen"
+        loadingLabel?.text = "Zürich wird aufgebaut …"
+        loadingLabel?.isHidden = false
+        box([2000,0.1,2000],0xC8D1AE,[0,-0.08,0])
+        guard let url = Bundle.main.url(forResource: "zurich-city", withExtension: "json") else {
+            mapStatus = "Kartendaten fehlen"
+            loadingLabel?.text = "Stadtkarte nicht verfügbar"
+            return
+        }
+        mapTask = Task { [weak self] in
+            do {
+                let document = try await Task.detached(priority: .userInitiated) {
+                    try JSONDecoder().decode(RenderMap.self, from: Data(contentsOf: url))
+                }.value
+                guard let self, !Task.isCancelled, self.isZurich else { return }
+                let bounds = document.tiles.map(\.bounds).filter { $0.count == 4 }
+                if !bounds.isEmpty {
+                    self.mapBounds = [bounds.map{$0[0]}.min()!,bounds.map{$0[1]}.min()!,bounds.map{$0[2]}.max()!,bounds.map{$0[3]}.max()!]
+                }
+                // Populate the visible centre first, then stream the remaining tiles
+                // on successive main-actor turns so gestures remain responsive.
+                let ordered = document.tiles.sorted {
+                    abs($0.bounds[0]) + abs($0.bounds[1]) < abs($1.bounds[0]) + abs($1.bounds[1])
+                }
+                for tile in ordered {
+                    guard !Task.isCancelled, self.isZurich else { return }
+                    self.installTile(tile)
+                    self.updateMapDetail()
+                    await Task.yield()
+                }
+                guard !Task.isCancelled, self.isZurich else { return }
+                self.installMapLabels(document.labels)
+                self.zurichLandmarks()
+                self.mapStatus = "Amtliche Stadtkarte · Höhen stilisiert"
+                self.loadingLabel?.isHidden = true
+                self.updateCamera()
+            } catch {
+                guard let self, !Task.isCancelled else { return }
+                self.mapStatus = "Stadtkarte konnte nicht geladen werden"
+                self.loadingLabel?.text = "Stadtkarte konnte nicht geladen werden"
+                self.updateCamera()
+            }
+        }
+    }
+
+    private func installTile(_ tile: RenderMap.Tile) {
+        guard tile.bounds.count == 4 else { return }
+        let center = SIMD2<Float>((tile.bounds[0]+tile.bounds[2])/2,(tile.bounds[1]+tile.bounds[3])/2)
+        let extent = max(tile.bounds[2]-tile.bounds[0],tile.bounds[3]-tile.bounds[1])
+        let group = Entity()
+        group.name = "city-tile:" + tile.id
+        town.addChild(group)
+        mapTiles.append((group,center,extent))
+        var windows: [SIMD3<Float>] = []
+        var windowNormals: [SIMD3<Float>] = []
+        var windowIndices: [UInt32] = []
+        var treeVertices: [SIMD3<Float>] = [], treeNormals: [SIMD3<Float>] = [], treeIndices: [UInt32] = []
+        var treeCount = 0
+        let palette: [String: UInt32] = ["building":0xE4D5BA,"building2":0xD3C9BA,"building3":0xE7C5AA,
+            "roof":0xAD8B77,"roof2":0x89958D,"water":0x74B9BC,"park":0xACC68C,"forest":0x8EAE78,
+            "road":0xD6D2C4,"rail":0x929C94,"boundary":0xBAC59E]
+        for source in tile.meshes {
+            guard source.positions.count >= 9, source.positions.count % 3 == 0, source.indices.count % 3 == 0 else { continue }
+            let vertices = stride(from: 0,to: source.positions.count,by: 3).map {
+                SIMD3<Float>(source.positions[$0],source.positions[$0+1],source.positions[$0+2])
+            }
+            guard source.indices.allSatisfy({ Int($0) < vertices.count }) else { continue }
+            var normals = [SIMD3<Float>](repeating: .zero,count: vertices.count)
+            for index in stride(from: 0,to: source.indices.count,by: 3) {
+                let a = Int(source.indices[index]), b = Int(source.indices[index+1]), c = Int(source.indices[index+2])
+                let cross = simd_cross(vertices[b]-vertices[a],vertices[c]-vertices[a])
+                if simd_length_squared(cross) > 0.0000000001 {
+                    normals[a] += cross; normals[b] += cross; normals[c] += cross
+                    let centroid = (vertices[a]+vertices[b]+vertices[c])/3
+                    if (source.kind == "forest" || source.kind == "park"), treeCount < 40, index % 24 == 0 {
+                        treeCount += 1
+                        let height: Float = source.kind == "forest" ? 0.16 : 0.1
+                        for side in 0..<6 {
+                            let angle = Float(side)*2*Float.pi/6, next = Float(side+1)*2*Float.pi/6
+                            let p = centroid + SIMD3<Float>(cos(angle)*height*0.35,0.025,sin(angle)*height*0.35)
+                            let q = centroid + SIMD3<Float>(0,height,0)
+                            let r = centroid + SIMD3<Float>(cos(next)*height*0.35,0.025,sin(next)*height*0.35)
+                            let normal = simd_normalize(simd_cross(q-p,r-p))
+                            let base = UInt32(treeVertices.count)
+                            treeVertices.append(contentsOf: [p,q,r]); treeNormals.append(contentsOf: [normal,normal,normal])
+                            treeIndices.append(contentsOf: [base,base+1,base+2])
+                        }
+                    }
+                    if source.kind == "road", people.count < 42, index % 75 == 0,
+                       abs(centroid.x) < 6, abs(centroid.z) < 6 {
+                        let person = Entity(); person.position = centroid + SIMD3<Float>(0,0.008,0)
+                        town.addChild(person)
+                        let colors: [UInt32] = [0xC88266,0x627F91,0xE1BD70]
+                        box([0.012,0.026,0.012],colors[people.count % 3],[0,0.018,0],parent: person)
+                        sphere(0.008,0xD7B491,[0,0.039,0],parent: person)
+                        people.append((person,person.position,Float(people.count),true))
+                    }
+                    // Small facade details are batched, capped, and only visible
+                    // nearby. Two immutable models share each window mesh.
+                    if source.kind.hasPrefix("building"), abs(cross.y) < simd_length(cross)*0.05,
+                       index % 6 == 0, windows.count < 2400 {
+                        let points = [vertices[a],vertices[b],vertices[c]]
+                        let low = points.map(\.y).min()!, high = points.map(\.y).max()!
+                        let n = simd_normalize(cross)
+                        let side = SIMD3<Float>(n.z,0,-n.x)
+                        let midpoint = (vertices[a]+vertices[b]+vertices[c])/3
+                        if high-low > 0.07 {
+                            let p = SIMD3<Float>(midpoint.x,(high+low)/2,midpoint.z) + n*0.0015
+                            let halfWidth: Float = 0.009, halfHeight: Float = 0.014
+                            let up = SIMD3<Float>(0,halfHeight,0), across = side*halfWidth
+                            let start = UInt32(windows.count)
+                            windows.append(contentsOf: [p-across-up,p+across-up,p+across+up,p-across+up])
+                            windowNormals.append(contentsOf: [n,n,n,n])
+                            windowIndices.append(contentsOf: [start,start+1,start+2,start,start+2,start+3])
+                        }
+                    }
+                }
+            }
+            normals = normals.map { simd_length_squared($0) > 0 ? simd_normalize($0) : SIMD3<Float>(0,1,0) }
+            if let mesh = makeMesh(vertices,normals,source.indices,name: tile.id + source.kind) {
+                group.addChild(ModelEntity(mesh: mesh,materials: [material(palette[source.kind] ?? 0xD2C8AE)]))
+            }
+        }
+        if let mesh = makeMesh(treeVertices,treeNormals,treeIndices,name: tile.id + "-trees") {
+            group.addChild(ModelEntity(mesh: mesh,materials: [material(0x739366)]))
+        }
+        if let mesh = makeMesh(windows,windowNormals,windowIndices,name: tile.id + "-windows") {
+            let day = ModelEntity(mesh: mesh,materials: [material(0x779A9B)])
+            let evening = ModelEntity(mesh: mesh,materials: [UnlitMaterial(color: UIColor(hex: 0xFFE1A5))])
+            dayWindows.addChild(day); nightWindows.addChild(evening)
+            detailTiles.append((day,evening,center))
+        }
+    }
+
+    private func installMapLabels(_ labels: [RenderMap.Label]) {
+        for label in labels {
+            let node = Entity()
+            node.position = [label.x,0.65,label.z]
+            let mesh = MeshResource.generateText(label.name,extrusionDepth: 0.001,font: .systemFont(ofSize: 0.24,weight: .semibold))
+            let text = ModelEntity(mesh: mesh,materials: [UnlitMaterial(color: UIColor(hex: 0x425B51))])
+            let bounds = text.visualBounds(relativeTo: nil)
+            text.position.x = -bounds.extents.x/2
+            let plate = box([bounds.extents.x+0.18,0.38,0.012],0xF2EFDF,[0,0.1,-0.02],parent: node,round: 0.004)
+            plate.name = "district-label"
+            node.addChild(text); town.addChild(node)
+            mapLabels.append((node,[label.x,label.z]))
+        }
+    }
+
+    private func zurichLandmarks() {
+        // Recognisable, deliberately stylised silhouettes at their geographic
+        // locations; the cadastral footprint below remains the survey geometry.
+        // LV95 coordinates use the same projection/origin as the bundled mesh.
+        let gross = SIMD2<Float>(1.9189,7.5341)
+        for offset: Float in [-0.09,0.09] {
+            box([0.10,0.53,0.10],0xD8C6A5,[gross.x+offset,0.29,gross.y])
+            let crown = sphere(0.065,0x657F70,[gross.x+offset,0.59,gross.y])
+            crown.scale = [1,1.4,1]
+        }
+        let frau = SIMD2<Float>(-0.4162,8.0117)
+        box([0.11,0.47,0.11],0xD8C6A5,[frau.x,0.26,frau.y])
+        mountain(radius: 0.085,height: 0.34,color: 0x629183,position: [frau.x,0.49,frau.y])
+    }
+
+    private func makeMesh(_ positions: [SIMD3<Float>], _ normals: [SIMD3<Float>], _ indices: [UInt32], name: String) -> MeshResource? {
+        guard !positions.isEmpty, !indices.isEmpty else { return nil }
+        var descriptor = MeshDescriptor(name: name)
+        descriptor.positions = .init(positions)
+        descriptor.normals = .init(normals)
+        descriptor.primitives = .triangles(indices)
+        return try? MeshResource.generate(from: [descriptor])
+    }
+
+    private func updateMapDetail() {
+        guard isZurich else { return }
+        let focus = SIMD2<Float>(target.x,target.z)
+        for (tile, center, extent) in mapTiles {
+            tile.isEnabled = simd_distance(center,focus) < radius * 1.3 + extent
+        }
+        for (node, position) in mapLabels {
+            node.isEnabled = radius > 16 && simd_distance(position,focus) < radius*0.4
+            node.orientation = camera.orientation
+            node.scale = SIMD3<Float>(repeating: max(0.6,radius*0.04))
+        }
+        for (person, origin, _, _) in people {
+            person.isEnabled = radius < 20 && simd_distance(SIMD2<Float>(origin.x,origin.z),focus) < 8
+        }
+        for (day, evening, center) in detailTiles {
+            let visible = radius < 28 && simd_distance(center,focus) < 13
+            day.isEnabled = visible; evening.isEnabled = visible
         }
     }
 
@@ -358,31 +620,56 @@ final class CityRenderer: NSObject {
         traffic.children.removeAll(); vehicles.removeAll()
         for owned in lines {
             guard let route = Catalog.route(owned.id) else { continue }
-            let height: Float = route.kind == .ship ? 0.22 : route.kind == .cable ? 4.8 : route.kind == .plane ? 5 : 0.31
+            let points = route.points(in: cityID)
+            let height: Float = isZurich ? (route.kind == .ship ? 0.025 : 0.045) : (route.kind == .ship ? 0.22 : route.kind == .cable ? 4.8 : route.kind == .plane ? 5 : 0.31)
             if route.kind != .plane {
-                for i in 1..<route.points.count {
-                    let a = route.points[i-1], b = route.points[i]
-                    segment(from: [Float(a.x),height,Float(a.z)],to: [Float(b.x),height,Float(b.z)],width: selected == route.id ? 0.12 : 0.045,height: 0.02,color: route.colorHex,parent: traffic)
-                }
+                drawRoute(points, height: height, width: selected == route.id ? 0.055 : 0.022, route: route)
+
             }
-            if route.kind == .cable {
-                for point in route.points { box([0.09,4.5,0.09],0x8C9F89,[Float(point.x),2.55,Float(point.z)],parent: traffic) }
+            if route.kind == .cable && !isZurich {
+                for point in [points.first!, points.last!] { box([0.09,4.5,0.09],0x8C9F89,[Float(point.x),2.55,Float(point.z)],parent: traffic) }
             }
-            if route.kind == .metro {
-                for point in [route.points.first!,route.points.last!] {
+            if route.kind == .metro && !isZurich {
+                for point in [points.first!,points.last!] {
                     box([0.65,0.2,0.65],route.colorHex,[Float(point.x)-0.75,0.32,Float(point.z)],parent: traffic)
                     box([0.1,0.75,0.1],route.colorHex,[Float(point.x)-0.75,0.75,Float(point.z)],parent: traffic)
                 }
             }
             for index in 0..<owned.tier {
                 let node = vehicle(route)
+                if isZurich { node.scale = SIMD3<Float>(repeating: route.kind == .ship ? 0.3 : 0.16) }
                 node.name = "route:\(route.id)"
                 node.generateCollisionShapes(recursive: true)
                 traffic.addChild(node)
-                vehicles.append(.init(node: node,route: route,phase: Double(index) / Double(owned.tier)*2,base: route.kind == .ship ? 0.05 : route.kind == .cable ? 3.45 : route.kind == .train ? 0.13 : 0.09))
+                vehicles.append(.init(node: node,route: route,phase: Double(index) / Double(owned.tier)*2,points: points,base: isZurich ? 0.025 : (route.kind == .ship ? 0.05 : route.kind == .cable ? 3.45 : route.kind == .train ? 0.13 : 0.09)))
             }
         }
     }
+    private func drawRoute(_ points: [MapPoint], height: Float, width: Float, route: TransitRoute) {
+        guard points.count > 1 else { return }
+        var vertices: [SIMD3<Float>] = [], normals: [SIMD3<Float>] = [], indices: [UInt32] = []
+        for i in 1..<points.count {
+            let a = SIMD3<Float>(Float(points[i-1].x),height,Float(points[i-1].z))
+            let b = SIMD3<Float>(Float(points[i].x),height,Float(points[i].z))
+            let delta = b-a
+            guard simd_length_squared(delta) > 0.000001 else { continue }
+            let side = simd_normalize(SIMD3<Float>(delta.z,0,-delta.x))*width/2
+            let start = UInt32(vertices.count)
+            vertices.append(contentsOf: [a-side,a+side,b+side,b-side])
+            normals.append(contentsOf: Array(repeating: SIMD3<Float>(0,1,0),count: 4))
+            indices.append(contentsOf: [start,start+2,start+1,start,start+3,start+2])
+        }
+        if let mesh = makeMesh(vertices,normals,indices,name: route.id) {
+            let node = ModelEntity(mesh: mesh,materials: [UnlitMaterial(color: UIColor(hex: route.colorHex))])
+            node.name = "route:" + route.id
+            traffic.addChild(node)
+        }
+        for point in [points.first!,points.last!] {
+            let stop = box([0.08,0.012,0.08],0xFFF6D9,[Float(point.x),height+0.01,Float(point.z)],parent: traffic,round: 0.004)
+            stop.name = "route:" + route.id
+        }
+    }
+
     private func vehicle(_ route: TransitRoute) -> Entity {
         let group = Entity(), color = route.colorHex
         switch route.kind {
@@ -423,34 +710,55 @@ final class CityRenderer: NSObject {
         guard view?.window != nil else { return }
         time += elapsed * speed
         for vehicle in vehicles {
-            let pose = RouteMotion.pose(points: vehicle.route.points, phase: time/vehicle.route.duration+vehicle.phase)
+            let pose = RouteMotion.pose(points: vehicle.points, phase: time/vehicle.route.duration+vehicle.phase)
             var y = vehicle.base
             if vehicle.route.kind == .plane { y = 3 + Float(sin(pose.fraction * .pi))*5 }
-            if vehicle.route.kind == .ship && !reducedMotion { y += Float(sin(time*2+vehicle.phase))*0.02 }
+            if vehicle.route.kind == .ship && !reducedMotion { y += Float(sin(time*2+vehicle.phase))*(isZurich ? 0.002 : 0.02) }
             vehicle.node.position = [Float(pose.x),y,Float(pose.z)]
             vehicle.node.orientation = simd_quatf(angle: Float(pose.heading), axis: [0,1,0])
         }
         guard !reducedMotion else { return }
         for (node, origin, phase, alongX) in people {
-            let movement = Float(sin(time*0.12+Double(phase)))*1.1
-            node.position = origin + SIMD3<Float>(alongX ? movement : 0,abs(Float(sin(time*5+Double(phase))))*0.012,alongX ? 0 : movement)
+            let movement = Float(sin(time*0.12+Double(phase)))*(isZurich ? 0.03 : 1.1)
+            node.position = origin + SIMD3<Float>(alongX ? movement : 0,abs(Float(sin(time*5+Double(phase))))*(isZurich ? 0.001 : 0.012),alongX ? 0 : movement)
         }
         for (index,ripple) in boats.enumerated() { ripple.scale.x = 0.85+Float(sin(time+Double(index)))*0.25 }
     }
     private func updateCamera() {
         let position = target + SIMD3<Float>(radius*cos(pitch)*sin(yaw),radius*sin(pitch),radius*cos(pitch)*cos(yaw))
         camera.look(at: target,from: position,relativeTo: nil)
+        updateMapDetail()
+        view?.accessibilityValue = "\(isZurich ? "Zürich" : "Stadt") · Zoom \(Int(radius)) · Fokus \(Int(target.x)),\(Int(target.z)) · \(mapStatus)"
+    }
+    private func overviewRadius() -> Float {
+        let aspect = max(0.4, Float((view?.bounds.width ?? 390) / max(1, view?.bounds.height ?? 844)))
+        let width = mapBounds[2]-mapBounds[0], depth = mapBounds[3]-mapBounds[1]
+        return min(620, max(width / aspect, depth) * 1.75)
+    }
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        (gestureRecognizer is UIPinchGestureRecognizer && otherGestureRecognizer is UIRotationGestureRecognizer) ||
+        (gestureRecognizer is UIRotationGestureRecognizer && otherGestureRecognizer is UIPinchGestureRecognizer)
     }
     @objc private func drag(_ gesture: UIPanGestureRecognizer) {
-        if gesture.state == .began { startYaw = yaw; startPitch = pitch }
+        if gesture.state == .began { startTarget = target }
         let delta = gesture.translation(in: view)
-        yaw = startYaw-Float(delta.x)*0.006
-        pitch = max(0.35,min(1.2,startPitch+Float(delta.y)*0.003))
+        let factor = radius * 0.67 / Float(max(1, view?.bounds.height ?? 844))
+        let right = SIMD3<Float>(cos(yaw),0,-sin(yaw))
+        let down = SIMD3<Float>(sin(yaw),0,cos(yaw))
+        target = startTarget - right * Float(delta.x) * factor - down * Float(delta.y) * factor / sin(pitch)
+        let bounds: [Float] = isZurich ? mapBounds : [-20,-20,20,20]
+        target.x = max(bounds[0],min(bounds[2],target.x))
+        target.z = max(bounds[1],min(bounds[3],target.z))
+        updateCamera()
+    }
+    @objc private func rotate(_ gesture: UIRotationGestureRecognizer) {
+        if gesture.state == .began { startYaw = yaw }
+        yaw = startYaw - Float(gesture.rotation)
         updateCamera()
     }
     @objc private func pinch(_ gesture: UIPinchGestureRecognizer) {
         if gesture.state == .began { startRadius = radius }
-        radius = max(25,min(105,startRadius/Float(gesture.scale)))
+        radius = max(isZurich ? 5 : 25,min(isZurich ? 620 : 105,startRadius/Float(gesture.scale)))
         updateCamera()
     }
     @objc private func tap(_ gesture: UITapGestureRecognizer) {

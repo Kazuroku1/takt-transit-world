@@ -7,6 +7,7 @@ enum TaktTheme {
     static let muted = Color(hex: 0x7C8B70)
     static let green = Color(hex: 0x4D6F4B)
     static let coral = Color(hex: 0xE88660)
+    static let gold = Color(hex: 0xA67B2E)
     static let border = Color(hex: 0xE2E8D8)
     static let pale = Color(hex: 0xEAF0E0)
 }
@@ -58,4 +59,16 @@ struct SoftIcon: View {
             .foregroundStyle(color).frame(width: 44, height: 46)
             .background(color.opacity(0.11), in: RoundedRectangle(cornerRadius: 13))
     }
+}
+
+private struct HUDSurface: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(TaktTheme.paper.opacity(0.96), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(.white.opacity(0.8), lineWidth: 1))
+            .shadow(color: TaktTheme.ink.opacity(0.12), radius: 12, y: 4)
+    }
+}
+extension View {
+    func hudSurface() -> some View { modifier(HUDSurface()) }
 }

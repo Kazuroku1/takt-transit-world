@@ -1,0 +1,35 @@
+ZÜRCHER LINIEN – QUELLEN UND SPIELANPASSUNGEN
+
+Quelle: Kanton Zürich, Linien des öffentlichen Verkehrs (OGD), CCZero.
+https://data.stadt-zuerich.ch/dataset/ktzh_linien_des_oeffentlichen_verkehrs__ogd_
+https://maps.zh.ch/wfs/OGDZHWFS
+
+Bus 31/33 und Tram 4/8:
+Layer ogd-0108_giszhpub_zvv_linien_gen_l, VBZ-Betriebszweige 02/01,
+Richtung 0, Aktualisierung im Datensatz 17_12_2025.
+S12: Layer ogd-0108_giszhpub_zvv_s_bahn_linien_l,
+Aktualisierung im Datensatz 05_01_2023.
+
+Die gelieferten LV95-Geometrien werden in lokale Weltkoordinaten umgerechnet:
+Ursprung WGS84 8.5417, 47.3769 nach EPSG:2056 projiziert;
+100 Meter pro Welteinheit, x nach Osten, z nach Süden.
+Kurven werden mit 1.5m Toleranz vereinfacht. Strecken sind auf den Kartenrahmen
+beschnitten. Bei S12 wird die längste zusammenhängende Komponente verwendet.
+Eine amtliche Fahrtrichtung dient im Spiel als Hin- und Rückweg. Reale
+Einbahnführungen, Fahrpläne, Höhen, Tunnel und Zwischenhalte werden nicht
+vollständig simuliert. Die Angaben sind kein aktueller Reiseplaner.
+
+Erzeugung: scripts/build-zurich-routes.py; erzeugte Swift-Daten sind offline
+in der App enthalten. Das Spiel lädt keine Strecken aus dem Internet.
+
+31: 172 Punkte, ca.12.94km; 33:168 Punkte, ca.12.23km;
+4:93 Punkte, ca.5.18km; 8:133 Punkte, ca.8.78km;
+S12-Kartenausschnitt:147 Punkte, ca.19.68km.
+
+Schiff: von Hand angenäherte Strecke Bürkliplatz–Zürichhorn.
+Metro, Seilbahn und Flugplatz/Flugkorridor sind ausdrücklich fiktive
+Spielerweiterungen. Zürich besitzt keine Metro. Diese Angaben stehen auch
+bei den jeweiligen Linien in der App.
+
+Andere freischaltbare Städte verwenden vorerst die bestehenden stilisierten
+Karten. Nur Zürich erhält in dieser Version die amtliche Stadtgeometrie.
