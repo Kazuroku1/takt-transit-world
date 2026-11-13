@@ -1,0 +1,65 @@
+ZÜRICH: OFFLINE-STADTKARTE
+
+Quelle: Stadt Zürich, Geomatik + Vermessung, Amtliche Vermessung Stadt Zürich.
+Katalog: https://data.stadt-zuerich.ch/dataset/geo_amtliche_vermessung_stadt_zuerich
+Lizenz: Creative Commons CCZero (license_id=cc-zero, per CKAN-API geprüft).
+https://creativecommons.org/publicdomain/zero/1.0/
+WFS: https://www.ogd.stadt-zuerich.ch/wfs/geoportal/Amtliche_Vermessung_Stadt_Zuerich
+Abruf: 13. November 2026. Keine Netzwerkabfrage im laufenden Spiel.
+
+Vollständige WFS-Layer (Anzahl mit resultType=hits und tatsächlichem Download
+verglichen; keine maxFeatures-Stichprobe und keine Beschränkung auf die City):
+- av_bo_allegebaeude_a_v: 50 558 Gebäudeobjekte; 48 515 mit Status real.
+- av_bo_boflaeche_a: 107 638 Bodenbedeckungsobjekte.
+- av_ge_gemeindegrenze_a: 1 Gemeindegrenze.
+- av_geb_strassenstueck: 9 965 Strassen-Mittellinien (zur Quellkontrolle
+  heruntergeladen; die sichtbaren Strassenflächen stammen aus Bodenbedeckung).
+
+Gebäudeumrisse, Wasser, Strassen, Wald, Gärten und Grünflächen sind aus diesen
+amtlichen Geometrien abgeleitet. Die Gemeindegrenze umfasst das ganze
+Stadtgebiet: Altstetten, Höngg, Affoltern, Oerlikon, Schwamendingen, Fluntern,
+Altstadt, Wiedikon, Enge, Seefeld und Wollishofen. Der Zürichsee wird nur
+innerhalb des durch die Stadtvermessung erfassten Gebiets gezeigt.
+
+BEWUSSTE GESTALTERISCHE VEREINFACHUNGEN
+Die Quelle enthält keine Gebäudehöhen. Alle Höhen (4–27 m) und Fassaden-
+beziehungsweise Dachfarben sind deterministische gestalterische Näherungen.
+Das Gelände ist flach; keine vermessenen Terrainhöhen, keine verbindliche
+Architekturrekonstruktion. Quartierbeschriftungen sind manuell ungefähr
+platzierte Orientierungspunkte, keine amtlichen Quartierpolygone.
+Nur Gebäudestatus real wird dargestellt; eingereichte/freigegebene Projekte
+werden ausgelassen. Umrisse unter 4 m² werden aus Leistungsgründen ausgelassen.
+Gebäudekonturen sind mit 0,7 m, Bodenbedeckung mit 1,8 m Toleranz vereinfacht;
+Koordinaten sind auf 0,1 m gerundet. Kleine Details können dadurch entfallen.
+
+TECHNISCHE AUFBEREITUNG
+scripts/build_zurich_city.py lädt und prüft die kompletten Layer. Rohdaten
+liegen im temporären Verzeichnis takt-zurich-wfs-v1, nicht im Git-Repository.
+Die bereitgestellte native/Takt/Resources/zurich-city.json benötigt zur Laufzeit
+weder Python noch einen Kartendienst. Zum Neubau: Python 3.13, numpy, shapely,
+pyproj und mapbox-earcut installieren und das Skript ausführen.
+
+WFS liefert EPSG:2056 (LV95). Weltursprung ist WGS84 8.5417 E / 47.3769 N,
+in LV95 E=2683303.8937390875 / N=1247925.6278982018.
+x=(E-E0)/100, z=(N0-N)/100, y nach oben: 1 Einheit = 100 Meter.
+Eine einfache Grad-Meter-Formel darf nicht mit dieser Projektion vermischt
+werden, da die LV95-Gitterrichtung gegenüber geografisch Nord gedreht ist.
+
+Die Geometrie ist in nominell 1,2 km grosse Kacheln und Materialgruppen
+gebündelt. Bodenflächen werden an Kachelgrenzen geschnitten; Gebäude bleiben
+vollständig in ihrer Schwerpunktkachel. Die Bounds umfassen auch Überstände.
+Innenhöfe und Wasser-/Waldlöcher werden bei Earcut-Triangulierung berücksichtigt.
+Für jede Boden- und Dachfläche wird die Summe der Dreiecksflächen mit der
+Polygonfläche (ohne Löcher) verglichen. Meshindizes, Zahlen und Arrays werden
+vor dem Schreiben geprüft. Statistik und Quellanzahlen stehen im JSON-Kopf.
+
+GEPRÜFTES ERGEBNIS
+59 295 533 Bytes JSON, 91 Kacheln, 644 Material-Meshes,
+48 482 dargestellte Gebäudeumrisse, 1 284 015 Dreiecke,
+9 827 berücksichtigte Innenringe über alle triangulierten Flächen.
+20 136 Grünflächen-, 8 918 Strassen-/Bahnflächen-, 1 727 Wald-/Gehölz- und
+1 097 Gewässer-Quellobjekte wurden verarbeitet.
+scripts/validate_zurich_city.py prüft die gebündelte Datei, Indizes, Ausdehnung,
+endliche Koordinaten und nach Rundung nach oben gerichtete Flächendreiecke.
+Optional erzeugt das Skript eine PNG-Aufsicht (Pillow erforderlich); die
+vollständige Stadtgeometrie wurde in dieser Aufsicht visuell kontrolliert.

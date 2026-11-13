@@ -156,7 +156,9 @@ def main():
         labels=labels,tiles=list(tiles.values()))
     path=ROOT/'native/Takt/Resources/zurich-city.json'
     path.parent.mkdir(parents=True,exist_ok=True)
-    path.write_text(json.dumps(data,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
+    temporary=path.with_suffix('.tmp')
+    temporary.write_text(json.dumps(data,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
+    temporary.replace(path)
     print('Wrote',path,path.stat().st_size,'bytes',dict(stats),flush=True)
 
 if __name__=='__main__': main()
