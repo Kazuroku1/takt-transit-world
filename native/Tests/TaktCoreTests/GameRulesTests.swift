@@ -11,7 +11,7 @@ final class GameRulesTests: XCTestCase {
             remaining -= dt
         }
     }
-    func testFirstSessionBuysDefinedLineClaimsRewardAndUnlocksTram() throws {
+    func testFirstMountainSessionUnlocksTheValley() throws {
         var s = GameState()
         XCTAssertEqual(s.currentLines.map(\.id), ["b31"])
         try GameRules.apply(.buy("b33"), to: &s, day: day)
@@ -19,9 +19,14 @@ final class GameRulesTests: XCTestCase {
         try GameRules.apply(.claim("second"), to: &s, day: day)
         XCTAssertEqual(s.coins, 1300)
         XCTAssertEqual(s.level, 2)
-        try GameRules.apply(.buy("t4"), to: &s, day: day)
-        XCTAssertEqual(s.coins, 200)
-        XCTAssertNotNil(s.owned("t4"))
+        XCTAssertNotNil(GameRules.unlockReason(route: Catalog.route("t4")!, state: s))
+        XCTAssertThrowsError(try GameRules.apply(.visit("altdorf"), to: &s, day: day))
+        advance(&s, seconds: 300)
+        let beforeVisit = s.coins
+        try GameRules.apply(.visit("altdorf"), to: &s, day: day)
+        XCTAssertEqual(s.coins, beforeVisit - Catalog.city("altdorf").price)
+        XCTAssertEqual(s.cityID, "altdorf")
+        XCTAssertEqual(s.currentLines.map(\.id), ["b31"])
     }
     func testRejectedActionsAreAtomic() {
         let invalid: [GameAction] = [.buy("made-up"),.buy("t4"),.buy("b31"),.claim("second"),.upgrade("missing"),.visit("tokyo")]
@@ -64,15 +69,15 @@ final class GameRulesTests: XCTestCase {
     }
     func testCitiesRemainIndependentAndBothEarn() throws {
         var s = GameState(); s.coins = 10000; s.xp = GameState.xpNeeded(for: 3)
-        try GameRules.apply(.visit("bern"),to: &s,day: day)
+        try GameRules.apply(.visit("altdorf"),to: &s,day: day)
         XCTAssertEqual(s.coins,7200)
         try GameRules.apply(.buy("b33"),to: &s,day: day)
-        XCTAssertEqual(s.networks["zurich"]?.lines.count,1)
-        XCTAssertEqual(s.networks["bern"]?.lines.count,2)
+        XCTAssertEqual(s.networks["andermatt"]?.lines.count,1)
+        XCTAssertEqual(s.networks["altdorf"]?.lines.count,2)
         advance(&s,seconds: 14)
         XCTAssertEqual(s.passengers,16)
         let coins = s.coins
-        try GameRules.apply(.visit("zurich"),to: &s,day: day)
+        try GameRules.apply(.visit("andermatt"),to: &s,day: day)
         XCTAssertEqual(s.coins,coins)
     }
     func testDifferentFrameSizesKeepRewardsConsistentAcrossEvents() throws {
@@ -106,16 +111,30 @@ final class GameRulesTests: XCTestCase {
         XCTAssertEqual(s.dailyEarned,0)
         XCTAssertFalse(GameRules.quests(s,day: "2026-11-14").last!.ready)
     }
-    func testAllCitiesAndModesAreReachableWithoutCheats() {
+    func testTwoHourActiveSwissProgressionHasNoSoftlockOrInstantCompletion() {
         var s = GameState()
-        for _ in 0..<720 {
-            GameRules.advance(&s,by: 5,day: day)
-            for q in GameRules.quests(s,day: day) where q.ready { try? GameRules.apply(.claim(q.id),to: &s,day: day) }
-            for r in Catalog.routes { try? GameRules.apply(.buy(r.id),to: &s,day: day) }
-            for c in Catalog.cities where s.networks[c.id] == nil { try? GameRules.apply(.visit(c.id),to: &s,day: day) }
+        var firstArrival: [String: Double] = [:]
+        for _ in 0..<1440 {
+            GameRules.advance(&s, by: 5, day: day)
+            for q in GameRules.quests(s, day: day) where q.ready && !s.claimed.contains(q.id) {
+                try? GameRules.apply(.claim(q.id), to: &s, day: day)
+            }
+            for route in Catalog.routes(in: s.cityID) {
+                try? GameRules.apply(.buy(route.id), to: &s, day: day)
+            }
+            // An active player reinvests in each local network before expanding.
+            for line in s.currentLines where line.tier < 5 {
+                try? GameRules.apply(.upgrade(line.id), to: &s, day: day)
+            }
+            for city in Catalog.cities where s.networks[city.id] == nil {
+                try? GameRules.apply(.visit(city.id), to: &s, day: day)
+                if s.networks[city.id] != nil { firstArrival[city.id] = s.seconds }
+            }
         }
-        XCTAssertEqual(s.networks.count,8)
-        XCTAssertTrue(VehicleKind.allCases.allSatisfy { s.ownsKind($0) })
+        XCTAssertEqual(s.networks.count, 8)
+        XCTAssertTrue(Catalog.playableKinds.allSatisfy { s.ownsKind($0) })
+        XCTAssertGreaterThan(firstArrival["geneva"] ?? 0, 30 * 60)
+        XCTAssertLessThanOrEqual(firstArrival["geneva"] ?? .infinity, 120 * 60)
         XCTAssertTrue(s.isValid)
     }
     func testSaveRoundTripAndInvalidValues() throws {
@@ -125,13 +144,13 @@ final class GameRulesTests: XCTestCase {
         XCTAssertThrowsError(try SaveCodec.decode(Data("broken".utf8)))
         s.coins = -1
         XCTAssertThrowsError(try SaveCodec.decode(SaveCodec.encode(s)))
-        s.coins = 1; s.networks["zurich"]!.lines[0].progress = 10000
+        s.coins = 1; s.networks["andermatt"]!.lines[0].progress = 10000
         XCTAssertThrowsError(try SaveCodec.decode(SaveCodec.encode(s)))
     }
     func testUnknownAndDuplicateSavedRoutesAreRejected() throws {
-        var s = GameState(); s.networks["zurich"]!.lines.append(OwnedLine(id: "b31"))
+        var s = GameState(); s.networks["andermatt"]!.lines.append(OwnedLine(id: "b31"))
         XCTAssertFalse(s.isValid)
-        s = GameState(); s.networks["zurich"]!.lines = [OwnedLine(id: "unknown")]
+        s = GameState(); s.networks["andermatt"]!.lines = [OwnedLine(id: "unknown")]
         XCTAssertFalse(s.isValid)
         s = GameState(); s.cityID = "unknown"
         XCTAssertFalse(s.isValid)
@@ -142,6 +161,67 @@ final class GameRulesTests: XCTestCase {
             GameRules.advance(&s,by: dt,day: day)
             XCTAssertEqual(s,before)
         }
+    }
+    func testSequentialRegionsCannotBeSkippedEvenWithMoneyAndLevel() throws {
+        var s = GameState(); s.coins = 10_000_000; s.xp = 100_000
+        let before = s
+        XCTAssertThrowsError(try GameRules.apply(.visit("zurich"), to: &s, day: day))
+        XCTAssertEqual(s, before)
+        for city in Catalog.cities.dropFirst() {
+            XCTAssertNil(s.regionUnlockReason(cityID: city.id))
+            try GameRules.apply(.visit(city.id), to: &s, day: day)
+            XCTAssertEqual(s.currentLines.map(\.id), ["b31"])
+        }
+        XCTAssertTrue(s.isValid)
+    }
+    func testLocalTransportPrerequisitesAndWrongRegionRejectAtomically() throws {
+        var s = GameState(); s.coins = 10_000_000; s.xp = 100_000
+        for id in ["t4", "s12", "ic1", "a1", "m1", "l1", "c1"] {
+            let before = s
+            XCTAssertThrowsError(try GameRules.apply(.buy(id), to: &s, day: day))
+            XCTAssertEqual(s, before)
+        }
+        for city in Catalog.cities.dropFirst().prefix(4) { try GameRules.apply(.visit(city.id), to: &s, day: day) }
+        for id in ["s12", "ic1", "a1"] {
+            let before = s
+            XCTAssertThrowsError(try GameRules.apply(.buy(id), to: &s, day: day)); XCTAssertEqual(s,before)
+        }
+        for id in ["t4", "s12", "ic1", "a1"] {
+            XCTAssertNil(GameRules.unlockReason(route: Catalog.route(id)!, state: s))
+            try GameRules.apply(.buy(id), to: &s, day: day)
+        }
+        XCTAssertTrue(s.isValid)
+    }
+    func testV2MigrationKeepsSwissAssetsAndRefundsRetiredAssets() throws {
+        var old = GameState(); old.version = 2; old.cityID = "paris"; old.coins = 1234
+        old.xp = 900; old.passengers = 789; old.settings.night = true
+        var retired = OwnedLine(id: "m1"); retired.tier = 3; retired.carried = 99
+        var bus = OwnedLine(id: "b33"); bus.tier = 2; bus.progress = 4
+        old.networks = ["zurich": CityNetwork(lines: [OwnedLine(id: "b31"), bus, retired]), "paris": CityNetwork(lines: [bus])]
+        let migrated = try SaveCodec.decode(SaveCodec.encode(old))
+        let metro = Catalog.route("m1")!, busRoute = Catalog.route("b33")!
+        let refund = 6500 + metro.price + metro.upgradePrice(tier: 1) + metro.upgradePrice(tier: 2) + busRoute.price + busRoute.upgradePrice(tier: 1)
+        XCTAssertEqual(migrated.coins, old.coins + refund)
+        XCTAssertEqual(migrated.xp, old.xp); XCTAssertEqual(migrated.passengers, old.passengers)
+        XCTAssertEqual(migrated.settings, old.settings)
+        XCTAssertEqual(migrated.version,3); XCTAssertEqual(migrated.cityID,"andermatt")
+        XCTAssertNotNil(migrated.networks["zurich"]); XCTAssertNil(migrated.networks["paris"])
+        XCTAssertEqual(migrated.networks["zurich"]?.lines.first { $0.id == "b33" }, bus)
+        XCTAssertTrue(migrated.isValid)
+        XCTAssertEqual(try SaveCodec.decode(SaveCodec.encode(migrated)), migrated)
+        old.networks["paris"]!.lines[0].tier = 100
+        XCTAssertThrowsError(try SaveCodec.decode(SaveCodec.encode(old)))
+    }
+    func testV3SaveRejectsMissingPredecessorRegion() throws {
+        var s = GameState()
+        s.networks["zurich"] = CityNetwork()
+        XCTAssertFalse(s.isValid)
+        XCTAssertThrowsError(try SaveCodec.decode(SaveCodec.encode(s)))
+    }
+    func testV3SaveRejectsRegionIncompatibleLines() throws {
+        var s = GameState(); s.networks["andermatt"]!.lines.append(OwnedLine(id: "a1"))
+        XCTAssertFalse(s.isValid)
+        XCTAssertThrowsError(try SaveCodec.decode(SaveCodec.encode(s)))
     }
     func testVehiclesVisitBothTerminalsAndStayOnTheirPredefinedSegments() {
         for route in Catalog.routes {

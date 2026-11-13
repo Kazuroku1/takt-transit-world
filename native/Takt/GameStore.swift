@@ -43,9 +43,17 @@ final class GameStore: ObservableObject {
             }
         }
         #if DEBUG
-        if arguments.contains("--demo-all") {
-            restored.coins = 25000; restored.xp = GameState.xpNeeded(for: 7)
-            restored.networks["zurich"] = CityNetwork(lines: Catalog.routes.map { OwnedLine(id: $0.id) })
+        if arguments.contains("--demo-all") || arguments.contains("--demo-switzerland") {
+            restored.coins = 25000; restored.xp = GameState.xpNeeded(for: 9)
+            restored.networks = Dictionary(uniqueKeysWithValues: Catalog.cities.map { city in
+                (city.id, CityNetwork(lines: Catalog.routes(in: city.id).map { OwnedLine(id: $0.id) }))
+            })
+            restored.cityID = "zurich"
+        }
+        if isTesting && arguments.contains("--test-valley-ready") {
+            restored = GameState()
+            restored.coins = Catalog.city("altdorf").price
+            restored.xp = GameState.xpNeeded(for: 2)
         }
         #endif
         state = restored; saveIssue = warning
@@ -98,7 +106,7 @@ final class GameStore: ObservableObject {
     }
     func reset() {
         state = GameState(); selectedRoute = nil; speed = 1; save()
-        notify("Ein frischer Start in Zürich.")
+        notify("Ein frischer Start in Andermatt.")
     }
     func notify(_ text: String, success: Bool = true) {
         messageTask?.cancel()

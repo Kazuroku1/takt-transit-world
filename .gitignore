@@ -16,3 +16,4 @@ ios/capacitor-cordova-ios-plugins/
 native/.build/
 native/.swiftpm/
 native/**/xcuserdata/
+__pycache__/

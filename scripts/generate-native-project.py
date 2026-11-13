@@ -82,7 +82,7 @@ for scope in ["project","app","test"]:
         }
         settings["ONLY_ACTIVE_ARCH"] = "YES" if config == "Debug" else "NO"
         if scope != "project":
-            settings.update({"PRODUCT_NAME":"$(TARGET_NAME)","PRODUCT_BUNDLE_IDENTIFIER":"ch.takt.transitworld" if scope == "app" else "ch.takt.transitworld.uitests", "CODE_SIGN_STYLE":"Automatic", "TARGETED_DEVICE_FAMILY":"1,2", "MARKETING_VERSION":"0.3.0", "CURRENT_PROJECT_VERSION":"3", "LD_RUNPATH_SEARCH_PATHS":"$(inherited) @executable_path/Frameworks"})
+            settings.update({"PRODUCT_NAME":"$(TARGET_NAME)","PRODUCT_BUNDLE_IDENTIFIER":"ch.takt.transitworld" if scope == "app" else "ch.takt.transitworld.uitests", "CODE_SIGN_STYLE":"Automatic", "TARGETED_DEVICE_FAMILY":"1,2", "MARKETING_VERSION":"0.4.0", "CURRENT_PROJECT_VERSION":"4", "LD_RUNPATH_SEARCH_PATHS":"$(inherited) @executable_path/Frameworks"})
         if scope == "app":
             settings.update({"INFOPLIST_FILE":"Takt/Info.plist","ASSETCATALOG_COMPILER_APPICON_NAME":"AppIcon", "SUPPORTS_MACCATALYST":"NO", "SUPPORTED_PLATFORMS":"iphoneos iphonesimulator"})
         if scope == "test":

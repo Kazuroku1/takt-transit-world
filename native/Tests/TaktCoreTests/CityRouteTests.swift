@@ -2,15 +2,20 @@ import XCTest
 @testable import TaktCore
 
 final class CityRouteTests: XCTestCase {
-    func testZurichRoutesUseDistinctGeographicPathsWithoutChangingOtherCities() {
-        for route in Catalog.routes {
-            let points = route.points(in: "zurich")
-            XCTAssertGreaterThan(points.count, 1, route.id)
-            XCTAssertNotEqual(points, route.points, "Zürich must not silently use the old grid")
-            XCTAssertEqual(route.points(in: "bern"), route.points)
-            XCTAssertTrue(points.allSatisfy { $0.x.isFinite && $0.z.isFinite && abs($0.x) < 90 && abs($0.z) < 90 })
-            XCTAssertFalse(route.stopNames(in: "zurich").isEmpty)
+    func testSwissRoutesUseSharedGeographyAndRegionAvailability() {
+        for city in Catalog.cities {
+            XCTAssertTrue(city.mapCenter.x.isFinite && city.mapCenter.z.isFinite)
+            XCTAssertTrue(Catalog.routes(in: city.id).allSatisfy { city.allowedKinds.contains($0.kind) })
+            for route in Catalog.routes(in: city.id) {
+                let points = route.points(in: city.id)
+                XCTAssertGreaterThan(points.count, 1)
+                XCTAssertTrue(points.allSatisfy { $0.x.isFinite && $0.z.isFinite })
+                XCTAssertFalse(route.stopNames(in: city.id).isEmpty)
+            }
         }
+        XCTAssertNotEqual(Catalog.route("b31")!.points(in: "bern"), Catalog.route("b31")!.points(in: "andermatt"))
+        XCTAssertEqual(Catalog.city("andermatt").allowedKinds, [.bus])
+        XCTAssertFalse(Catalog.routes(in: "luzern").contains { $0.kind == .tram })
     }
 
     func testImportedRoadRoutesFollowManySurveyedBendsAndRemainContinuous() {
@@ -30,7 +35,7 @@ final class CityRouteTests: XCTestCase {
     }
 
     func testFictionalExpansionRoutesAreLabelled() {
-        for id in ["m1", "c1", "a1"] {
+        for id in ["m1", "c1"] {
             XCTAssertTrue(Catalog.route(id)!.spatialNote(in: "zurich").hasPrefix("Fiktiv"))
         }
         XCTAssertTrue(Catalog.route("l1")!.spatialNote(in: "zurich").contains("angenäherte"))

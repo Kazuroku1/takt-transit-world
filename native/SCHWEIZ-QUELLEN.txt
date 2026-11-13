@@ -1,0 +1,63 @@
+SCHWEIZER KARTENDATEN — TAKT
+Stand der erzeugten Ressourcen: 13. November 2026
+
+1. Landesübersicht
+Takt/Resources/switzerland-map.json enthält die vereinfachte Schweizer
+Landesfläche und Seen aus Natural Earth, Massstab 1:10 Millionen.
+Quelle: https://github.com/nvkelso/natural-earth-vector/tree/master/geojson
+Datensätze: ne_10m_admin_0_countries, ne_10m_lakes.
+Natural Earth ist Public Domain:
+https://www.naturalearthdata.com/about/terms-of-use/
+Die Auflösung ist für die Landesübersicht bestimmt, nicht für Detailnavigation.
+
+2. Andermatt und Hospental
+© OpenStreetMap contributors. Open Database License (ODbL) 1.0:
+https://www.openstreetmap.org/copyright
+https://opendatacommons.org/licenses/odbl/1-0/
+Die OSM-Daten und daraus abgeleiteten Geometriedaten werden unter ODbL 1.0
+bereitgestellt. Das betrifft andermatt-osm-source.json, andermatt-city.json
+und die aus OSM-Strassen abgeleiteten Andermatt-Buspfade b31/b33 in
+Sources/TaktCore/SwissGeography.swift. Dies bezeichnet die Geometriedaten,
+nicht eine Neulizenzierung des übrigen Programmcodes.
+
+Der korrespondierende maschinenlesbare Quellextrakt wird vollständig als
+Takt/Resources/andermatt-osm-source.json mitgeliefert. Er wurde aus einem
+OSM-API-0.6-map-XML-Extrakt in Wege mit Knotenkoordinaten umgewandelt.
+Geografischer Ausschnitt: 8.565–8.615 Grad Ost, 46.615–46.655 Grad Nord.
+Die Wege können über diese Grenze hinausreichen; die sichtbaren Flächen
+werden auf den Ausschnitt zugeschnitten. Der Extrakt enthält keine vollständige
+OSM-Datenbank und garantiert keine vollständige Abbildung von Relationen.
+scripts/build_switzerland.py dokumentiert Projektion, Zuschnitt, Vereinfachung,
+Triangulierung, Gebäudeextrusion und Pfadsuche und nutzt diesen mitgelieferten
+Snapshot, wenn der lokale Downloadcache fehlt. Es benötigt zusätzlich
+scripts/build_zurich_city.py für gemeinsame Geometriefunktionen, übernimmt
+dabei jedoch keine Zürcher Quelldaten in den OSM-Datensatz.
+
+3. Getrennte Zürcher Daten
+Die Zürcher amtlichen Vermessungsdaten in zurich-city.json bleiben ein
+separater CCZero-Datensatz der Stadt Zürich (Geomatik + Vermessung).
+Die OSM-Ressourcen werden nicht als CCZero ausgegeben oder mit diesem
+Datensatz zu einer gemeinsamen herunterladbaren Geodatenbank verschmolzen.
+Weitere Zürcher Quellenangaben stehen in den Zürcher Quelldokumenten.
+
+4. Geografische und spielerische Grenzen
+Alle Ressourcen verwenden EPSG:2056 (LV95), Ursprung bei 8.5417 Grad Ost /
+47.3769 Grad Nord. Eine Spieleinheit entspricht 100 Metern; die Z-Achse zeigt
+nach Süden. Gebäudehöhen und Bergformen sind illustrativ, nicht vermessen.
+Zehn ungefähre Gipfelmarker, acht Regionszentren und die übrigen
+interregionalen Spielverbindungen sind in SwissGeography.swift enthalten.
+Andermatt-Busse folgen vereinfachten OSM-Strassen, sind aber keine zugesicherte
+reale Linienführung; Fahrpläne und Haltestellen sind Spielinhalte.
+Altdorf, Schwyz, Luzern, Bern, Basel und Genf haben stilisierte Siedlungen,
+keine flächendeckende amtliche Gebäudekarte. Landesgrenze und Seen sind
+vereinfacht. Diese Daten sind nicht für Navigation vorgesehen.
+
+5. Reproduktion und Kontrolle
+Python 3.13 mit shapely, pyproj, numpy und mapbox-earcut:
+    python scripts/build_switzerland.py
+Natural-Earth-Downloads werden im temporären Ordner takt-swiss-data gecacht.
+Der Generator prüft endliche Koordinaten, gültige Dreiecksindizes und nach
+oben gerichtete Oberflächen und entfernt durch Rundung kollabierte Dreiecke.
+Aktuelle Ausgabe: Landesübersicht 148 Kacheln, 902 Dreiecke; Andermatt
+19 Kacheln, 52 895 Dreiecke, 822 Gebäude, 1 009 Strassenwege,
+248 Gewässerwege und 29 Landnutzungsflächen.

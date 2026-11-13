@@ -1,13 +1,14 @@
 import Foundation
 
 public enum VehicleKind: String, CaseIterable, Codable, Identifiable, Sendable {
-    case bus, tram, train, metro, ship, cable, plane
+    case bus, tram, train, intercity, metro, ship, cable, plane
     public var id: String { rawValue }
     public var title: String {
         switch self {
         case .bus: return "Bus"
         case .tram: return "Tram"
-        case .train: return "Zug"
+        case .train: return "S-Bahn"
+        case .intercity: return "Fernzug"
         case .metro: return "Metro"
         case .ship: return "Schiff"
         case .cable: return "Seilbahn"
@@ -18,19 +19,20 @@ public enum VehicleKind: String, CaseIterable, Codable, Identifiable, Sendable {
         switch self {
         case .bus: return "bus.fill"
         case .tram: return "tram.fill"
-        case .train: return "train.side.front.car"
+        case .train, .intercity: return "train.side.front.car"
         case .metro: return "tram.tunnel.fill"
         case .ship: return "ferry.fill"
         case .cable: return "cablecar.fill"
         case .plane: return "airplane"
         }
     }
-    public var level: Int { Self.allCases.firstIndex(of: self)! + 1 }
+    public var level: Int { switch self { case .bus: return 1; case .tram: return 2; case .train: return 3; case .intercity: return 5; case .plane: return 7; case .metro, .ship, .cable: return 99 } }
     public var colorHex: UInt32 {
         switch self {
         case .bus: return 0xDFA137
         case .tram: return 0xDF725C
         case .train: return 0x628CB0
+        case .intercity: return 0xBB4652
         case .metro: return 0x9A81B5
         case .ship: return 0x55A69E
         case .cable: return 0x859E54
@@ -41,11 +43,12 @@ public enum VehicleKind: String, CaseIterable, Codable, Identifiable, Sendable {
         switch self {
         case .bus: return "Kleine Wege. Grosse Verbindungen."
         case .tram: return "Der Herzschlag deiner Innenstadt."
-        case .train: return "Mehr Menschen. Neue Horizonte."
+        case .train: return "Vom Umland ins Zentrum."
+        case .intercity: return "Die Schweiz wächst zusammen."
         case .metro: return "Unter der Stadt geht es vorwärts."
         case .ship: return "Dein Netz geht übers Wasser."
         case .cable: return "Mit Aussicht nach ganz oben."
-        case .plane: return "Die Welt liegt dir zu Füssen."
+        case .plane: return "Schweizer Flughäfen verbinden."
         }
     }
 }
@@ -76,22 +79,23 @@ public struct TransitRoute: Identifiable, Sendable {
         Int((Double(capacity * tier * fare) * 60 / duration).rounded())
     }
     public func stopNames(in cityID: String) -> [String] {
-        if cityID == "zurich", let names = ZurichRouteGeometry.stops[id] { return names }
-        guard let names = Catalog.terminals[cityID], let index = Catalog.routes.firstIndex(where: { $0.id == id }) else { return stops }
-        return stops.indices.map { names[(index + $0) % names.count] }
+        if cityID == "zurich", kind != .plane, let names = ZurichRouteGeometry.stops[id] { return names }
+        return SwissGeography.stopNames(routeID: id, cityID: cityID) ?? stops
     }
     public func points(in cityID: String) -> [MapPoint] {
-        cityID == "zurich" ? (ZurichRouteGeometry.paths[id] ?? points) : points
+        if cityID == "zurich", let path = ZurichRouteGeometry.paths[id], kind != .plane { return path }
+        return SwissGeography.points(routeID: id, cityID: cityID) ?? points.map { MapPoint($0.x + Catalog.city(cityID).mapCenter.x, $0.z + Catalog.city(cityID).mapCenter.z) }
     }
     public func spatialNote(in cityID: String) -> String {
-        guard cityID == "zurich" else { return "Stilisierte Spielstadt mit festgelegten Strecken." }
+        guard cityID == "zurich" else { return "Geografisch eingeordnete Spielverbindung. Strecken und Fahrpläne sind vereinfacht, kein reales Verkehrsangebot." }
         switch kind {
         case .bus, .tram: return "Amtlicher Linienverlauf, für das Spiel vereinfacht. Die Fahrzeuge pendeln auf einer Fahrtrichtung; gezeigt sind die Endhaltestellen."
         case .train: return "Amtlicher S12-Verlauf im Kartenausschnitt, vereinfacht. Ausgewählte Haltestellen; Tunnel werden sichtbar dargestellt."
+        case .intercity: return "Vereinfachte Fernverbindung zwischen Schweizer Regionen; keine exakte Fahrplanauskunft."
         case .ship: return "Spielerisch angenäherte Seestrecke zwischen realen Anlegestellen."
         case .metro: return "Fiktive Erweiterung: Zürich hat keine Metro. Diese Strecke gehört zu deinem Spielnetz."
         case .cable: return "Fiktive Seilbahn für dein Spielnetz; kein reales Verkehrsangebot."
-        case .plane: return "Fiktiver Stadtflugplatz und Flugkorridor für die Weltverbindung."
+        case .plane: return "Spielerische Verbindung zwischen realen Schweizer Flughäfen; kein realer Flugplan."
         }
     }
 }
@@ -107,18 +111,31 @@ public struct TransitCity: Identifiable, Sendable {
     public let x: Double
     public let y: Double
     public let tint: UInt32
+    public var mapCenter: MapPoint { SwissGeography.center(for: id) }
+    public var predecessorID: String? {
+        guard let index = Catalog.cities.firstIndex(where: { $0.id == id }), index > 0 else { return nil }
+        return Catalog.cities[index - 1].id
+    }
+    public var allowedKinds: [VehicleKind] {
+        var kinds: [VehicleKind] = [.bus]
+        if ["zurich", "bern", "basel", "geneva"].contains(id) { kinds.append(.tram) }
+        if ["luzern", "zurich", "bern", "basel", "geneva"].contains(id) { kinds += [.train, .intercity] }
+        if ["zurich", "basel", "geneva"].contains(id) { kinds.append(.plane) }
+        return kinds
+    }
 }
 
 public enum Catalog {
+    public static let playableKinds: [VehicleKind] = [.bus, .tram, .train, .intercity, .plane]
     public static let cities: [TransitCity] = [
-        .init(id: "zurich", name: "Zürich", country: "Schweiz", flag: "🇨🇭", motto: "Zwischen See und Stadtleben.", price: 0, requiredLevel: 1, x: 0.49, y: 0.31, tint: 0x75A98A),
-        .init(id: "bern", name: "Bern", country: "Schweiz", flag: "🇨🇭", motto: "Eine Altstadt voller neuer Wege.", price: 2800, requiredLevel: 3, x: 0.47, y: 0.33, tint: 0xC49D71),
-        .init(id: "paris", name: "Paris", country: "Frankreich", flag: "🇫🇷", motto: "Nächster Halt: la vie en rose.", price: 6500, requiredLevel: 4, x: 0.45, y: 0.29, tint: 0xB09AAB),
-        .init(id: "london", name: "London", country: "Grossbritannien", flag: "🇬🇧", motto: "Ein neuer Takt an der Themse.", price: 12000, requiredLevel: 5, x: 0.43, y: 0.24, tint: 0xA4A8BC),
-        .init(id: "newyork", name: "New York", country: "USA", flag: "🇺🇸", motto: "Ein Netz, das niemals schläft.", price: 20000, requiredLevel: 6, x: 0.25, y: 0.34, tint: 0xB7A183),
-        .init(id: "tokyo", name: "Tokio", country: "Japan", flag: "🇯🇵", motto: "Millionen Menschen. Dein Takt.", price: 35000, requiredLevel: 7, x: 0.87, y: 0.39, tint: 0xD4A2AE),
-        .init(id: "rio", name: "Rio de Janeiro", country: "Brasilien", flag: "🇧🇷", motto: "Verbindungen mit Meeresbrise.", price: 45000, requiredLevel: 8, x: 0.34, y: 0.71, tint: 0x88AF77),
-        .init(id: "sydney", name: "Sydney", country: "Australien", flag: "🇦🇺", motto: "Die Welt ist erst der Anfang.", price: 60000, requiredLevel: 9, x: 0.91, y: 0.78, tint: 0xD0B178)
+        .init(id: "andermatt", name: "Andermatt", country: "Schweiz", flag: "🇨🇭", motto: "Dein erster Bergbus.", price: 0, requiredLevel: 1, x: 0.62, y: 0.58, tint: 0x75A98A),
+        .init(id: "altdorf", name: "Altdorf", country: "Schweiz", flag: "🇨🇭", motto: "Vom Berg hinunter ins Tal.", price: 2800, requiredLevel: 2, x: 0.61, y: 0.46, tint: 0x75A98A),
+        .init(id: "schwyz", name: "Schwyz", country: "Schweiz", flag: "🇨🇭", motto: "Die kleinen Orte verbinden.", price: 5000, requiredLevel: 3, x: 0.59, y: 0.39, tint: 0x75A98A),
+        .init(id: "luzern", name: "Luzern", country: "Schweiz", flag: "🇨🇭", motto: "Am See beginnt dein Bahnnetz.", price: 18000, requiredLevel: 4, x: 0.51, y: 0.4, tint: 0x75A98A),
+        .init(id: "zurich", name: "Zürich", country: "Schweiz", flag: "🇨🇭", motto: "Bus, Tram und die grosse Stadt.", price: 65000, requiredLevel: 5, x: 0.62, y: 0.23, tint: 0x75A98A),
+        .init(id: "bern", name: "Bern", country: "Schweiz", flag: "🇨🇭", motto: "Dein Netz erreicht die Bundesstadt.", price: 350000, requiredLevel: 6, x: 0.32, y: 0.44, tint: 0x75A98A),
+        .init(id: "basel", name: "Basel", country: "Schweiz", flag: "🇨🇭", motto: "Verbindungen am Rhein.", price: 900000, requiredLevel: 7, x: 0.35, y: 0.12, tint: 0x75A98A),
+        .init(id: "geneva", name: "Genève", country: "Schweiz", flag: "🇨🇭", motto: "Vom Gotthard bis an den Léman.", price: 2500000, requiredLevel: 8, x: 0.07, y: 0.79, tint: 0x75A98A)
     ]
 
     public static let routes: [TransitRoute] = [
@@ -132,6 +149,8 @@ public enum Catalog {
               stops: ["Hardplatz", "Stauffacher", "Kunsthaus", "Opernhaus"], points: [.init(-10,3),.init(-4,3),.init(-4,-3),.init(2,-3),.init(12,-3),.init(12,3)]),
         .init(id: "s12", number: "S12", name: "Über die Stadt hinaus", kind: .train, price: 2600, duration: 24, capacity: 52, fare: 6, colorHex: 0x628CB0,
               stops: ["Altstetten", "Hauptbahnhof", "Stadelhofen"], points: [.init(-14,-11.8),.init(-4,-11.8),.init(2,-11.8),.init(14,-11.8)]),
+        .init(id: "ic1", number: "IC", name: "Die Schweiz verbindet", kind: .intercity, price: 6200, duration: 32, capacity: 110, fare: 9, colorHex: 0xBB4652,
+              stops: ["Hauptbahnhof", "Nachbarregion"], points: [.init(-14,-12),.init(14,-12)]),
         .init(id: "m1", number: "M1", name: "Unterwegs im Untergrund", kind: .metro, price: 3800, duration: 18, capacity: 64, fare: 6, colorHex: 0x9A81B5,
               stops: ["Universität", "Central", "Paradeplatz", "Seefeld"], points: [.init(-10,-9),.init(-10,-3),.init(-4,-3),.init(-4,3),.init(2,3),.init(2,9)]),
         .init(id: "l1", number: "L1", name: "Eine kleine Seereise", kind: .ship, price: 5200, duration: 28, capacity: 75, fare: 8, colorHex: 0x55A69E,
@@ -141,15 +160,10 @@ public enum Catalog {
         .init(id: "a1", number: "LX", name: "Hallo, Welt!", kind: .plane, price: 10000, duration: 35, capacity: 160, fare: 12, colorHex: 0xD48DA9,
               stops: ["Flughafen", "International"], points: [.init(-14,12),.init(-8,3),.init(0,-5),.init(9,-14),.init(16,-20)])
     ]
+    public static func routes(in cityID: String) -> [TransitRoute] {
+        guard let city = cities.first(where: { $0.id == cityID }) else { return [] }
+        return routes.filter { city.allowedKinds.contains($0.kind) }
+    }
     public static func route(_ id: String) -> TransitRoute? { routes.first { $0.id == id } }
     public static func city(_ id: String) -> TransitCity { cities.first { $0.id == id } ?? cities[0] }
-    static let terminals: [String: [String]] = [
-        "bern": ["Bümpliz","Bahnhof Bern","Wabern","Zytglogge","Wankdorf","Paul Klee"],
-        "paris": ["Montmartre","Gare du Nord","Bastille","Tour Eiffel","Châtelet","Opéra"],
-        "london": ["Camden","King’s Cross","Brixton","Greenwich","Waterloo","Westminster"],
-        "newyork": ["Harlem","Grand Central","Brooklyn","Queens","Times Square","Downtown"],
-        "tokyo": ["Shinjuku","Tokyo Station","Shibuya","Asakusa","Ginza","Ueno"],
-        "rio": ["Centro","Central do Brasil","Copacabana","Ipanema","Lapa","Botafogo"],
-        "sydney": ["Newtown","Central","Bondi","Circular Quay","Town Hall","Manly"]
-    ]
 }

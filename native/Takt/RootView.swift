@@ -19,7 +19,7 @@ private enum GameSheet: Identifiable {
         case .settings: return "Einstellungen"
         case .lines: return "Dein Liniennetz"
         case .fleet: return "Deine Flotte"
-        case .world: return "Deine Städte"
+        case .world: return "Deine Schweiz"
         case .quests: return "Deine Aufgaben"
         case .route(let id): return "Linie \(Catalog.route(id)?.number ?? id)"
         }
@@ -33,6 +33,7 @@ struct RootView: View {
     @State private var sheet: GameSheet?
     @State private var cameraCommand = CameraCommand()
     @State private var sheetDetent: PresentationDetent = .large
+    @State private var proposedRegion: String?
 
     private var compact: Bool { verticalSizeClass == .compact }
     private var cameraLayout: AnyLayout {
@@ -43,7 +44,8 @@ struct RootView: View {
         ZStack {
             NativeCityView(state: game.state, speed: game.active ? game.speed : 0,
                            cameraCommand: cameraCommand, selectedRoute: game.selectedRoute,
-                           onSelect: { id in game.selectedRoute = id; sheet = .route(id) })
+                           onSelect: { id in game.selectedRoute = id; sheet = .route(id) },
+                           onRegionSelect: { id in proposedRegion = id; sheet = .world })
                 .ignoresSafeArea()
             VStack(spacing: 10) {
                 topControls
@@ -61,7 +63,8 @@ struct RootView: View {
                 if !compact { Divider().frame(width: 24) }
                 hudIcon("minus", "Verkleinern", "zoom-out") { cameraCommand = .init(action: .zoomOut) }
                 if !compact { Divider().frame(width: 24) }
-                hudIcon("arrow.up.left.and.arrow.down.right", "Ganze Stadt", "city-overview") { cameraCommand = .init(action: .reset) }
+                hudIcon("map", "Ganze Schweiz", "city-overview") { cameraCommand = .init(action: .reset) }
+                hudIcon("location.fill", "Aktuelle Region", "region-focus") { cameraCommand = .init(action: .region) }
             }.hudSurface().padding(.trailing, compact ? 18 : 16)
         }
         .sheet(item: $sheet) { destination in
@@ -89,14 +92,14 @@ struct RootView: View {
     private var topControls: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 7) {
-                Button { sheet = .world } label: {
+                Button { proposedRegion = nil; sheet = .world } label: {
                     HStack(spacing: 7) {
                         Text(game.state.currentCity.name).font(.system(.headline, design: .rounded, weight: .bold))
                             .lineLimit(1).minimumScaleFactor(0.7)
                         Image(systemName: "chevron.down").font(.caption2.bold())
                     }
                     .frame(minHeight: 44)
-                }.accessibilityIdentifier("current-city").accessibilityHint("Städte entdecken und wechseln")
+                }.accessibilityIdentifier("current-city").accessibilityHint("Die Schweiz Region für Region erschliessen")
                 HStack(spacing: 6) {
                     Image(systemName: "circle.circle.fill").foregroundStyle(TaktTheme.gold)
                     Text(game.state.coins.taktNumber).monospacedDigit().fontWeight(.bold)
@@ -192,7 +195,7 @@ struct RootView: View {
         case .lines:
             LinesPage { id in game.selectedRoute = id; cameraCommand = .init(action: .focusRoute(id)); sheet = nil }
         case .fleet: FleetPage()
-        case .world: WorldPage { sheet = nil }
+        case .world: WorldPage(initialRegion: proposedRegion) { cameraCommand = .init(action: .region); sheet = nil }
         case .quests: QuestsPage()
         case .settings: EmptyView()
         case .route(let id):
@@ -250,6 +253,7 @@ struct WalletStrip: View {
 }
 
 struct LinesPage: View {
+    @EnvironmentObject private var game: GameStore
     @State private var filter: VehicleKind?
     let onView: (String) -> Void
     var body: some View {
@@ -260,10 +264,10 @@ struct LinesPage: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         filterButton(nil)
-                        ForEach(VehicleKind.allCases) { filterButton($0) }
+                        ForEach(game.state.currentCity.allowedKinds) { filterButton($0) }
                     }
                 }
-                ForEach(Catalog.routes.filter { filter == nil || $0.kind == filter }) { route in RouteCard(route: route, onView: { onView(route.id) }) }
+                ForEach(Catalog.routes(in: game.state.cityID).filter { filter == nil || $0.kind == filter }) { route in RouteCard(route: route, onView: { onView(route.id) }) }
                 Text("Alle Strecken und Haltestellen stehen fest. Zusätzliche Fahrzeuge erhöhen Kapazität und Einnahmen.").font(.footnote).foregroundStyle(TaktTheme.muted).padding(.vertical, 8)
             }.padding(20)
         }
@@ -279,7 +283,8 @@ struct RouteCard: View {
     let onView: (() -> Void)?
     var body: some View {
         let own = game.state.owned(route.id)
-        let locked = game.state.level < route.requiredLevel
+        let unlockReason = GameRules.unlockReason(route: route, state: game.state)
+        let locked = own == nil && unlockReason != nil
         let stops = route.stopNames(in: game.state.cityID)
         Card {
             VStack(alignment: .leading, spacing: 15) {
@@ -289,7 +294,7 @@ struct RouteCard: View {
                     Spacer()
                     if own != nil {
                         Label("In Betrieb", systemImage: "checkmark.circle.fill").font(.caption2.weight(.medium)).foregroundStyle(TaktTheme.green).accessibilityIdentifier("route-\(route.id)-owned")
-                    } else if locked { Label("Level \(route.requiredLevel)", systemImage: "lock.fill").font(.caption2).foregroundStyle(TaktTheme.muted) }
+                    } else if locked { Image(systemName: "lock.fill").font(.caption).foregroundStyle(TaktTheme.muted) }
                 }
                 Text(route.name).font(.system(.title3, design: .rounded, weight: .semibold))
                 HStack(spacing: 7) {
@@ -301,6 +306,9 @@ struct RouteCard: View {
                 }
                 Text(stops.joined(separator: " · ")).font(.caption).foregroundStyle(TaktTheme.muted)
                 Text(route.spatialNote(in: game.state.cityID)).font(.caption2).foregroundStyle(TaktTheme.muted)
+                if locked, let unlockReason {
+                    Label(unlockReason, systemImage: "lock.fill").font(.caption.weight(.medium)).foregroundStyle(TaktTheme.green)
+                }
                 HStack(spacing: 13) {
                     Label("\(stops.count) Stopps", systemImage: "mappin")
                     Label("\(route.capacity * (own?.tier ?? 1))/Fahrt", systemImage: "person.2")
@@ -316,7 +324,7 @@ struct RouteCard: View {
                     }
                     HStack { Text("\(own.carried.taktNumber) Fahrgäste befördert"); Spacer(); Text("\(own.tier)/5 Fahrzeuge") }.font(.caption2).foregroundStyle(TaktTheme.muted)
                 } else {
-                    Button { game.perform(.buy(route.id)) } label: { HStack { Image(systemName: locked ? "lock.fill" : "plus"); Text(locked ? "Ab Level \(route.requiredLevel)" : "Freischalten"); Spacer(); Text("\(route.price.taktNumber) ₮").monospacedDigit() }.padding(.horizontal, 13) }
+                    Button { game.perform(.buy(route.id)) } label: { HStack { Image(systemName: locked ? "lock.fill" : "plus"); Text(locked ? "Noch gesperrt" : "Freischalten"); Spacer(); Text("\(route.price.taktNumber) ₮").monospacedDigit() }.padding(.horizontal, 13) }
                         .buttonStyle(TaktButtonStyle(secondary: locked)).disabled(locked || game.state.coins < route.price).opacity(!locked && game.state.coins < route.price ? 0.45 : 1).accessibilityIdentifier("buy-\(route.id)")
                 }
             }
@@ -377,16 +385,16 @@ struct FleetPage: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                PageHeading(eyebrow: "Dein Fuhrpark", title: "Was bewegt dich?", detail: "Vom Quartierbus bis zum Flugzeug. Neue Level eröffnen neue Wege.")
+                PageHeading(eyebrow: "Dein Fuhrpark", title: "Vom Bergbus zum Fernverkehr.", detail: "Busse → Trams → S-Bahnen → Fernzüge → Flugzeuge. Dein Netz wächst mit jeder Region.")
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 145))], spacing: 14) {
-                    ForEach(VehicleKind.allCases) { kind in
+                    ForEach(Catalog.playableKinds) { kind in
                         Button { chosen = kind } label: {
                             VStack(alignment: .leading, spacing: 11) {
                                 ZStack {
                                     Circle().fill(Color(hex: kind.colorHex).opacity(0.1)).frame(width: 86, height: 86)
                                     Image(systemName: kind.symbol).font(.system(size: 47, weight: .light)).foregroundStyle(Color(hex: kind.colorHex))
                                 }.frame(maxWidth: .infinity).padding(.vertical, 10)
-                                Label(game.state.level >= kind.level ? "Verfügbar" : "Level \(kind.level)", systemImage: game.state.level >= kind.level ? "checkmark.circle" : "lock").font(.caption2).foregroundStyle(TaktTheme.muted)
+                                Label(game.state.currentCity.allowedKinds.contains(kind) ? "In dieser Region" : "Spätere Region", systemImage: game.state.currentCity.allowedKinds.contains(kind) ? "mappin" : "lock").font(.caption2).foregroundStyle(TaktTheme.muted)
                                 Text(kind.title).font(.system(.title3, design: .rounded, weight: .semibold))
                                 Text(kind.motto).font(.caption).foregroundStyle(TaktTheme.muted).frame(minHeight: 42, alignment: .top)
                             }.padding(17).background(TaktTheme.paper, in: RoundedRectangle(cornerRadius: 21))
@@ -398,9 +406,18 @@ struct FleetPage: View {
         }
         .sheet(item: $chosen) { kind in
             NavigationStack {
-                ScrollView { LazyVStack(spacing: 16) { ForEach(Catalog.routes.filter { $0.kind == kind }) { RouteCard(route: $0, onView: nil) } }.padding(20) }
+                ScrollView {
+                    LazyVStack(spacing: 16) {
+                        let routes = Catalog.routes(in: game.state.cityID).filter { $0.kind == kind }
+                        if routes.isEmpty {
+                            ContentUnavailableView("Dein Netz wächst weiter", systemImage: kind.symbol,
+                                description: Text("Dieses Verkehrsmittel kommt in einer späteren Region hinzu. Beginne hier mit Bussen und erschliesse die Schweiz Schritt für Schritt."))
+                        }
+                        ForEach(routes) { RouteCard(route: $0, onView: nil) }
+                    }.padding(20)
+                }
                     .background(TaktTheme.background).navigationTitle(kind.title)
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fertig") { chosen = nil } } }
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fertig") { chosen = nil }.accessibilityIdentifier("close-vehicle-detail") } }
             }.presentationDragIndicator(.visible)
         }
     }
@@ -408,62 +425,104 @@ struct FleetPage: View {
 
 struct WorldPage: View {
     @EnvironmentObject private var game: GameStore
+    var initialRegion: String? = nil
     let didVisit: () -> Void
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 18) {
-                PageHeading(eyebrow: "Dein Verkehrs-Imperium", title: "Nächster Halt: die Welt.", detail: "Alles beginnt in Zürich. Wohin führt dein Netz als Nächstes?")
-                HStack { Label("\(game.state.networks.count) von 8 Städten", systemImage: "globe.europe.africa"); Spacer(); Label(game.state.coins.taktNumber, systemImage: "circle.circle.fill") }.font(.caption.weight(.medium)).foregroundStyle(TaktTheme.green)
-                WorldMap(discovered: Set(game.state.networks.keys)).frame(height: 190).clipShape(RoundedRectangle(cornerRadius: 23))
-                ForEach(Catalog.cities) { city in
-                    let unlocked = game.state.networks[city.id] != nil
-                    let current = game.state.cityID == city.id
-                    Card {
-                        VStack(alignment: .leading, spacing: 14) {
-                            HStack(spacing: 12) {
-                                Text(city.flag).font(.largeTitle).frame(width: 50, height: 53).background(Color(hex: city.tint).opacity(0.14), in: RoundedRectangle(cornerRadius: 14))
-                                VStack(alignment: .leading, spacing: 5) { Text(city.name).font(.system(.title2, design: .rounded, weight: .semibold)); Text(city.country).font(.caption).foregroundStyle(TaktTheme.muted) }
-                                Spacer()
-                                if current { Text("Du bist hier").font(.caption2.weight(.semibold)).foregroundStyle(TaktTheme.green) }
-                                else if unlocked { Image(systemName: "checkmark.circle.fill").foregroundStyle(TaktTheme.green) }
-                                else { Label("\(city.requiredLevel)", systemImage: "sparkles").font(.caption).foregroundStyle(TaktTheme.muted) }
+        ScrollViewReader { reader in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    PageHeading(eyebrow: "Dein Schweizer Verkehrsnetz", title: "Vom Bergdorf zur Schweiz.", detail: "Alles beginnt mit einem Bergbus in Andermatt. Erschliesse Täler, kleinere Orte und schliesslich die grossen Städte.")
+                    HStack {
+                        Label("\(game.state.networks.count) von \(Catalog.cities.count) Regionen", systemImage: "map")
+                        Spacer()
+                        Label(game.state.coins.taktNumber, systemImage: "circle.circle.fill")
+                    }.font(.caption.weight(.medium)).foregroundStyle(TaktTheme.green)
+                    WorldMap(discovered: Set(game.state.networks.keys)).frame(height: 220).clipShape(RoundedRectangle(cornerRadius: 23))
+                    ForEach(Array(Catalog.cities.enumerated()), id: \.element.id) { index, city in
+                        let unlocked = game.state.networks[city.id] != nil
+                        let current = game.state.cityID == city.id
+                        let reason = game.state.regionUnlockReason(cityID: city.id)
+                        let blocked = reason != nil || game.state.coins < city.price
+                        Card {
+                            VStack(alignment: .leading, spacing: 14) {
+                                HStack(spacing: 12) {
+                                    Text(String(format: "%02d", index + 1))
+                                        .font(.system(.title2, design: .rounded, weight: .bold))
+                                        .foregroundStyle(unlocked ? TaktTheme.green : TaktTheme.muted)
+                                        .frame(width: 50, height: 53).background(Color(hex: city.tint).opacity(0.14), in: RoundedRectangle(cornerRadius: 14))
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text(city.name).font(.system(.title2, design: .rounded, weight: .semibold))
+                                        Text(city.country).font(.caption).foregroundStyle(TaktTheme.muted)
+                                    }
+                                    Spacer()
+                                    Image(systemName: current ? "location.fill" : unlocked ? "checkmark.circle.fill" : "lock.fill").foregroundStyle(unlocked ? TaktTheme.green : TaktTheme.muted)
+                                }
+                                Text(city.motto).font(.subheadline).foregroundStyle(TaktTheme.muted)
+                                HStack(spacing: 12) {
+                                    ForEach(city.allowedKinds) { kind in
+                                        Image(systemName: kind.symbol).accessibilityLabel(kind.title)
+                                    }
+                                }.foregroundStyle(TaktTheme.green)
+                                if !unlocked, let reason {
+                                    Label(reason, systemImage: "lock.fill").font(.caption.weight(.medium)).foregroundStyle(TaktTheme.muted)
+                                }
+                                Button {
+                                    game.perform(.visit(city.id))
+                                    if game.state.cityID == city.id { didVisit() }
+                                } label: {
+                                    HStack {
+                                        Text(current ? "Aktuelle Region" : unlocked ? "Zum Verkehrsnetz" : "Region erschliessen")
+                                        Spacer()
+                                        if !unlocked { Text("\(city.price.taktNumber) ₮") }
+                                        else if !current { Image(systemName: "arrow.right") }
+                                    }.padding(.horizontal, 14)
+                                }.buttonStyle(TaktButtonStyle(secondary: unlocked))
+                                    .disabled(current || (!unlocked && blocked))
+                                    .opacity(current || (!unlocked && blocked) ? 0.5 : 1)
+                                    .accessibilityIdentifier("visit-\(city.id)")
                             }
-                            Text(city.motto).font(.subheadline).foregroundStyle(TaktTheme.muted)
-                            Button { game.perform(.visit(city.id)); if game.state.cityID == city.id { didVisit() } } label: {
-                                HStack { Text(current ? "Aktuelle Stadt" : unlocked ? "Stadt besuchen" : game.state.level < city.requiredLevel ? "Ab Level \(city.requiredLevel)" : "Stadt erschliessen"); Spacer(); if !unlocked { Text("\(city.price.taktNumber) ₮") } else if !current { Image(systemName: "arrow.right") } }.padding(.horizontal, 14)
-                            }.buttonStyle(TaktButtonStyle(secondary: unlocked)).disabled(current || (!unlocked && (game.state.level < city.requiredLevel || game.state.coins < city.price))).opacity(current || (!unlocked && (game.state.level < city.requiredLevel || game.state.coins < city.price)) ? 0.5 : 1).accessibilityIdentifier("visit-\(city.id)")
-                        }
+                        }.id(city.id)
                     }
-                }
-                Text("Alle erschlossenen Städte verdienen gleichzeitig, solange das Spiel aktiv ist. Jede Stadt beginnt mit einer Buslinie. Die Miniaturwelten sind stilisiert.").font(.footnote).foregroundStyle(TaktTheme.muted)
-            }.padding(20)
+                    Text("Jede neue Region beginnt mit Bussen. Alle erschlossenen Netze verdienen gleichzeitig, solange du spielst. Die ganze Schweiz bleibt auf derselben Karte.")
+                        .font(.footnote).foregroundStyle(TaktTheme.muted)
+                }.padding(20)
+            }
+            .onAppear {
+                if let initialRegion { reader.scrollTo(initialRegion, anchor: .top) }
+            }
         }
     }
 }
 
 struct WorldMap: View {
     let discovered: Set<String>
-    private let continents: [[CGPoint]] = [
-        [.init(x:0.08,y:0.2),.init(x:0.17,y:0.08),.init(x:0.31,y:0.21),.init(x:0.27,y:0.38),.init(x:0.21,y:0.48),.init(x:0.13,y:0.33)],
-        [.init(x:0.23,y:0.48),.init(x:0.31,y:0.45),.init(x:0.35,y:0.6),.init(x:0.28,y:0.92),.init(x:0.24,y:0.75)],
-        [.init(x:0.43,y:0.22),.init(x:0.49,y:0.14),.init(x:0.57,y:0.23),.init(x:0.54,y:0.35),.init(x:0.47,y:0.38)],
-        [.init(x:0.46,y:0.39),.init(x:0.53,y:0.36),.init(x:0.58,y:0.48),.init(x:0.53,y:0.72),.init(x:0.48,y:0.65),.init(x:0.45,y:0.51)],
-        [.init(x:0.55,y:0.22),.init(x:0.67,y:0.12),.init(x:0.89,y:0.22),.init(x:0.93,y:0.33),.init(x:0.82,y:0.4),.init(x:0.76,y:0.54),.init(x:0.69,y:0.42),.init(x:0.61,y:0.34)],
-        [.init(x:0.83,y:0.74),.init(x:0.9,y:0.68),.init(x:0.95,y:0.81),.init(x:0.9,y:0.87),.init(x:0.84,y:0.84)]
-    ]
     var body: some View {
         Canvas { context, size in
             context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(TaktTheme.pale))
-            for polygon in continents {
-                var path = Path(); path.addLines(polygon.map { CGPoint(x: $0.x * size.width, y: $0.y * size.height) }); path.closeSubpath()
-                context.fill(path, with: .color(Color(hex: 0xC3D1B5)))
+            let bounds = SwissGeography.bounds
+            let scale = min((size.width-24)/(bounds[2]-bounds[0]), (size.height-24)/(bounds[3]-bounds[1]))
+            let width = (bounds[2]-bounds[0])*scale, height = (bounds[3]-bounds[1])*scale
+            func screen(_ point: MapPoint) -> CGPoint {
+                CGPoint(x: (size.width-width)/2+(point.x-bounds[0])*scale,
+                        y: (size.height-height)/2+(point.z-bounds[1])*scale)
+            }
+            for ring in SwissGeography.outline {
+                var path = Path(); path.addLines(ring.map(screen)); path.closeSubpath()
+                context.fill(path, with: .color(Color(hex: 0xBFCEAE)))
+                context.stroke(path, with: .color(TaktTheme.green.opacity(0.25)), lineWidth: 1)
             }
             for city in Catalog.cities {
-                let x = city.x * size.width, y = city.y * size.height
+                let center = screen(city.mapCenter)
+                if let previousID = city.predecessorID {
+                    let previous = screen(Catalog.city(previousID).mapCenter)
+                    var path = Path(); path.move(to: previous); path.addLine(to: center)
+                    context.stroke(path, with: .color(discovered.contains(city.id) ? TaktTheme.green : TaktTheme.muted.opacity(0.35)), style: StrokeStyle(lineWidth: 1.5, dash: discovered.contains(city.id) ? [] : [3,3]))
+                }
                 let radius = discovered.contains(city.id) ? 5.0 : 3.0
-                context.fill(Path(ellipseIn: CGRect(x: x-radius, y: y-radius, width: radius*2, height: radius*2)), with: .color(discovered.contains(city.id) ? TaktTheme.coral : TaktTheme.muted.opacity(0.4)))
+                context.fill(Path(ellipseIn: CGRect(x: center.x-radius,y: center.y-radius,width: radius*2,height: radius*2)),
+                             with: .color(discovered.contains(city.id) ? TaktTheme.coral : TaktTheme.muted))
             }
-        }.accessibilityLabel("Weltkarte. \(discovered.count) von acht Städten freigeschaltet.")
+        }.accessibilityLabel("Schweizkarte. \(discovered.count) von \(Catalog.cities.count) Regionen erschlossen.")
     }
 }
 
@@ -491,21 +550,23 @@ struct SettingsPage: View {
                 Section("So geht’s") {
                     helpRow("1", "Linien kaufen", "Dein erster Bus fährt schon. Kaufe weitere feste Strecken im Liniennetz.")
                     helpRow("2", "Aufgaben abholen", "Für Meilensteine erhältst du Münzen und XP. Hole sie unter Aufgaben ab.")
-                    helpRow("3", "Weiter wachsen", "Neue Level eröffnen Verkehrsmittel und Städte. Zusätzliche Fahrzeuge verdienen mehr.")
-                    helpRow("4", "Die Stadt entdecken", "Mit einem Finger verschieben, mit zwei Fingern zoomen oder drehen. Ganze Stadt bringt dich zur Übersicht. Tippe ein Fahrzeug für Details an.")
+                    helpRow("3", "Weiter wachsen", "Erschliesse vom Bergdorf aus eine Region nach der anderen. Busse, Trams, S-Bahnen, Fernzüge und Flugzeuge bauen aufeinander auf.")
+                    helpRow("4", "Die Schweiz entdecken", "Mit einem Finger verschieben, mit zwei Fingern zoomen oder drehen. Ganze Schweiz zeigt das Land; Aktuelle Region bringt dich zurück. Tippe ein Fahrzeug für Details an.")
                 }
                 Section("Karte und Daten") {
-                    Text("Zürich: Stadt Zürich, amtliche Vermessung (CCZero). Gebäudehöhen sind schematisch, nicht vermessen. Verkehrswege sind für das Spiel vereinfacht; erfundene Verbindungen sind bei der Linie gekennzeichnet. Andere Städte sind stilisierte Miniaturwelten.")
+                    Text("Schweiz-Übersicht: Natural Earth (Public Domain). Andermatt: © OpenStreetMap-Mitwirkende (ODbL). Zürich: Stadt Zürich, amtliche Vermessung (CCZero). Höhen und Berge sind gestalterisch angenähert. Weitere Regionen und viele Linienverläufe sind für das Spiel stilisiert.")
                         .font(.footnote).foregroundStyle(.secondary)
+                    Link("OpenStreetMap: Mitwirkende und Lizenz", destination: URL(string: "https://www.openstreetmap.org/copyright")!)
+                    Link("Natural Earth", destination: URL(string: "https://www.naturalearthdata.com/about/terms-of-use/")!)
                     Link("Geodaten der Stadt Zürich", destination: URL(string: "https://data.stadt-zuerich.ch/dataset/geo_amtliche_vermessung_stadt_zuerich")!)
                 }
                 Section { Button("Spielstand zurücksetzen", role: .destructive) { confirmReset = true }.accessibilityIdentifier("reset-game") }
-                Section { HStack { Text("takt.").font(.title.bold()); Spacer(); Text("Swift · Version 0.2.0").font(.caption).foregroundStyle(.secondary) } }
+                Section { HStack { Text("takt.").font(.title.bold()); Spacer(); Text("Swift · Version 0.4.0").font(.caption).foregroundStyle(.secondary) } }
             }
             .navigationTitle("Ganz in deinem Takt.").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fertig") { dismiss() }.accessibilityIdentifier("close-sheet") } }
             .confirmationDialog("Deinen gesamten Spielstand löschen?", isPresented: $confirmReset, titleVisibility: .visible) {
-                Button("Neu in Zürich anfangen", role: .destructive) { game.reset(); dismiss() }
+                Button("Neu in Andermatt anfangen", role: .destructive) { game.reset(); dismiss() }
                 Button("Behalten", role: .cancel) {}
             }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
