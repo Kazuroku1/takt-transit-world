@@ -70,6 +70,7 @@ for scope in ["project","app","test"]:
             "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "DEBUG" if config == "Debug" else "",
             "ENABLE_TESTABILITY": "YES" if config == "Debug" else "NO"
         }
+        settings["ONLY_ACTIVE_ARCH"] = "YES" if config == "Debug" else "NO"
         if scope != "project":
             settings.update({"PRODUCT_NAME":"$(TARGET_NAME)","PRODUCT_BUNDLE_IDENTIFIER":"ch.takt.transitworld" if scope == "app" else "ch.takt.transitworld.uitests", "CODE_SIGN_STYLE":"Automatic", "TARGETED_DEVICE_FAMILY":"1,2", "MARKETING_VERSION":"0.2.0", "CURRENT_PROJECT_VERSION":"2", "LD_RUNPATH_SEARCH_PATHS":"$(inherited) @executable_path/Frameworks"})
         if scope == "app":

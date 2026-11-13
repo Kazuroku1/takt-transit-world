@@ -1,6 +1,55 @@
 # Takt — Deine Stadt. Dein Netz.
 
-Spielbare erste Beta eines ÖV-Aufbauspiels für iPhone, iPad und Browser. React + TypeScript, eine animierte Three.js-Miniaturstadt und ein natives iOS-Projekt mit Capacitor.
+ÖV-Aufbauspiel mit festen kaufbaren Linien, sichtbarem Verkehr und freischaltbaren Städten.
+
+## Neue native iPhone-Version (Swift)
+
+Die vollständig native Umsetzung liegt unter **`native/`**: SwiftUI für die
+Oberfläche, RealityKit für die 3D-Stadt und ein eigener Swift-Spielkern. Dieses
+Xcode-Projekt verwendet weder Capacitor noch eine WebView und hat keine externen
+Swift-Paketabhängigkeiten. Mindestversion: iOS/iPadOS 17.
+
+Enthalten: alle sieben Verkehrsmittel, neun feste Linien pro Stadt, Fahrzeugausbau,
+acht Städte mit eigenen Netzen, Quests und Tagesaufgaben, Einkommen/XP, Ereignisse,
+Tag/Nacht, Kamera-Gesten, haptisches Feedback, Pause/Tempo und lokale Spielstände
+mit Sicherung sowie nativem Datei-Import/-Export. Fahrzeuge und Fahrgäste werden
+als native RealityKit-Modelle animiert. Es wird kein Kamerazugriff benötigt.
+
+Auf einem Mac mit Xcode 26:
+
+```sh
+swift test --package-path native
+open native/Takt.xcodeproj
+```
+
+In Xcode das Scheme **Takt** und ein iPhone als Simulator auswählen und starten.
+Für den Build auf einem persönlichen Gerät ist ein passendes Signing-Team nötig.
+
+```sh
+bash scripts/build-native-ios.sh
+```
+
+Das erzeugt `build/Takt-Native.ipa` für Geräte und `build/Takt-Simulator.zip`
+mit einer Simulator-App für Apple Silicon und Intel. Das Cloud-Workflow
+**Takt Swift - iPhone und Simulator** baut beide und führt native Swift-Tests
+und XCTest-Bedienabläufe auf einem iPhone-Simulator aus. Der Workflow startet
+manuell; auf unserem öffentlichen Repository werden Standard-GitHub-Runner benutzt.
+
+T3 Code: **Settings → Integrations → Devices → Agent device access** aktivieren
+und danach eine neue Agent-Sitzung starten. Erst wenn `device_list` einen
+iOS-Simulator liefert, kann die App im T3-Gerätefenster installiert und bedient
+werden. Das Vorhandensein des Gerätemenüs allein bedeutet auf Windows noch
+nicht, dass ein iOS-Gerätehost verbunden ist.
+
+Der native Swift-Spielstand ist ein neues Format; vorhandene Browser-Spielstände
+werden nicht automatisch übernommen. Zur Dateiübertragung die Exportfunktion
+der jeweiligen Version verwenden; die Swift-App akzeptiert ihr eigenes Format.
+
+## Bisheriger Laptop-Prototyp
+
+Die Browser-Version unter `src/` bleibt zum direkten Spielen auf Windows erhalten.
+Sie verwendet React, TypeScript und Three.js. Das ältere Capacitor-Projekt unter
+`ios/` gehört zu diesem Prototyp und ist nicht das neue Swift-Projekt.
 
 ## Starten
 
