@@ -440,7 +440,13 @@ final class CityRenderer: NSObject, UIGestureRecognizerDelegate {
                             let halfWidth: Float = 0.009, halfHeight: Float = 0.014
                             let up = SIMD3<Float>(0,halfHeight,0), across = side*halfWidth
                             let start = UInt32(windows.count)
-                            windows.append(contentsOf: [p-across-up,p+across-up,p+across+up,p-across+up])
+                            let left: SIMD3<Float> = p - across
+                            let right: SIMD3<Float> = p + across
+                            let lowerLeft: SIMD3<Float> = left - up
+                            let lowerRight: SIMD3<Float> = right - up
+                            let upperRight: SIMD3<Float> = right + up
+                            let upperLeft: SIMD3<Float> = left + up
+                            windows.append(contentsOf: [lowerLeft,lowerRight,upperRight,upperLeft])
                             windowNormals.append(contentsOf: [n,n,n,n])
                             windowIndices.append(contentsOf: [start,start+1,start+2,start,start+2,start+3])
                         }
