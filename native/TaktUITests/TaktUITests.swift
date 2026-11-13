@@ -2,6 +2,9 @@ import XCTest
 
 final class TaktUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
+    override func tearDownWithError() throws {
+        if testRun?.hasSucceeded == false { capture("Fehlgeschlagener Ablauf") }
+    }
     func testMountainBusesQuestAndUpgrade() throws {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing","--freeze-clock"]
@@ -18,6 +21,7 @@ final class TaktUITests: XCTestCase {
         second.tap()
         XCTAssertTrue(app.staticTexts["route-b33-owned"].waitForExistence(timeout: 3))
         closeSheet(in: app)
+        print("Quest control before opening: \(app.buttons["open-quests"].debugDescription)")
         app.buttons["open-quests"].tap()
         XCTAssertTrue(app.navigationBars["Deine Aufgaben"].waitForExistence(timeout: 5))
         let reward = app.buttons["claim-second"]

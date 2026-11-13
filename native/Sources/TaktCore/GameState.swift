@@ -149,6 +149,7 @@ public enum GameRules {
         case .bus: return nil
         case .tram: return local.contains(.bus) ? nil : "Beginne mit einem Bus in dieser Stadt."
         case .train:
+            guard state.ownsKind(.tram) else { return "Eröffne zuerst eine Tramlinie in Zürich. Danach wird die S-Bahn-Technik verfügbar." }
             if state.currentCity.allowedKinds.contains(.tram) { return local.contains(.tram) ? nil : "Eröffne zuerst eine Tramlinie in dieser Stadt." }
             return state.owned("b33") != nil ? nil : "Baue zuerst das lokale Busnetz mit einer zweiten Linie aus."
         case .intercity: return local.contains(.train) ? nil : "Eröffne zuerst eine S-Bahn in dieser Region."

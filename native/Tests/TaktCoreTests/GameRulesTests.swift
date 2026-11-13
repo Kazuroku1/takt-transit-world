@@ -212,6 +212,20 @@ final class GameRulesTests: XCTestCase {
         old.networks["paris"]!.lines[0].tier = 100
         XCTAssertThrowsError(try SaveCodec.decode(SaveCodec.encode(old)))
     }
+    func testTramsPrecedeRailEvenInARegionWithoutTrams() throws {
+        var s = GameState(); s.coins = 10_000_000; s.xp = 100_000
+        for city in Catalog.cities.dropFirst().prefix(3) { try GameRules.apply(.visit(city.id), to: &s, day: day) }
+        XCTAssertEqual(s.cityID, "luzern")
+        try GameRules.apply(.buy("b33"), to: &s, day: day)
+        let before = s
+        XCTAssertThrowsError(try GameRules.apply(.buy("s12"), to: &s, day: day))
+        XCTAssertEqual(s, before)
+        try GameRules.apply(.visit("zurich"), to: &s, day: day)
+        try GameRules.apply(.buy("t4"), to: &s, day: day)
+        try GameRules.apply(.visit("luzern"), to: &s, day: day)
+        try GameRules.apply(.buy("s12"), to: &s, day: day)
+        XCTAssertNotNil(s.owned("s12"))
+    }
     func testV3SaveRejectsMissingPredecessorRegion() throws {
         var s = GameState()
         s.networks["zurich"] = CityNetwork()

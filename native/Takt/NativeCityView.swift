@@ -70,7 +70,8 @@ final class CityRenderer: NSObject, UIGestureRecognizerDelegate {
     private var worldStarted = false
     private var regionSignature = ""
     private let regionPins = Entity()
-    private var regionMarkers: [(Entity, SIMD2<Float>)] = []
+    private var regionMarkers: [(node: Entity, title: Entity, position: SIMD2<Float>, width: Float, id: String)] = []
+    private var unlockedRegions = Set<String>()
     private var onRegionSelect: ((String) -> Void)?
     private var mapTiles: [(Entity, SIMD2<Float>, Float, Bool)] = []
     private var detailTiles: [(Entity, Entity, SIMD2<Float>)] = []
@@ -159,6 +160,7 @@ final class CityRenderer: NSObject, UIGestureRecognizerDelegate {
             loadMap("switzerland-map", country: true)
             loadMap("andermatt-city", country: false)
             buildSwissMountains()
+            buildAndermattRelief()
             buildIllustrativeSettlements()
         }
         if state.cityID != cityID {
@@ -172,15 +174,15 @@ final class CityRenderer: NSObject, UIGestureRecognizerDelegate {
         }
         if night != state.settings.night || signature.isEmpty {
             night = state.settings.night
-            view?.environment.background = .color(UIColor(hex: night ? 0x354C5A : 0xE1E9D8))
-            sun.light.intensity = night ? 500 : 2300
-            fill.light.intensity = night ? 280 : 850
-            sun.light.color = UIColor(hex: night ? 0x9DB5DE : 0xFFF3DB)
+            view?.environment.background = .color(UIColor(hex: night ? 0x152937 : 0xE1E9D8))
+            sun.light.intensity = night ? 75 : 2300
+            fill.light.intensity = night ? 40 : 850
+            sun.light.color = UIColor(hex: night ? 0x789BD6 : 0xFFF3DB)
             // Keep material resources immutable while RealityKit renders. Replacing
             // hundreds of shared material blocks can crash older simulator runtimes.
             dayWindows.isEnabled = !night
             nightWindows.isEnabled = night
-            view?.environment.lighting.intensityExponent = night ? -1 : 0.5
+            view?.environment.lighting.intensityExponent = night ? -4 : 0.5
         }
         let newSignature = state.networks.keys.sorted().map { id in
             id + (state.networks[id]?.lines.map { "\($0.id):\($0.tier)" }.joined(separator: ",") ?? "")
@@ -277,22 +279,68 @@ final class CityRenderer: NSObject, UIGestureRecognizerDelegate {
 
     private func buildRegionMarkers(unlocked: Set<String>) {
         regionPins.children.removeAll(); regionMarkers.removeAll()
+        unlockedRegions = unlocked
         for city in Catalog.cities {
             let point = city.mapCenter
             let node = Entity(); node.name = "region:" + city.id
             node.position = [Float(point.x),1,Float(point.z)]
             let owned = unlocked.contains(city.id)
+            let titleNode = Entity(); titleNode.position.y = 0.15; node.addChild(titleNode)
+            let dot = sphere(0.075,owned ? 0xFFF3CA : 0x587D68,[0,-0.07,0],parent: node)
+            dot.generateCollisionShapes(recursive: false)
             let title = city.name + (owned ? "" : " +")
             let mesh = MeshResource.generateText(title,extrusionDepth: 0.001,font: .systemFont(ofSize: 0.23,weight: .semibold))
             let text = ModelEntity(mesh: mesh,materials: [UnlitMaterial(color: UIColor(hex: owned ? 0xF8F1D9 : 0x54665C))])
             let width = text.visualBounds(relativeTo: nil).extents.x
             text.position = [-width/2,0,0.02]
-            let plate = box([width+0.25,0.42,0.04],owned ? 0x477A65 : 0xDDDCC9,[0,0.1,0],parent: node,round: 0.015)
+            let plate = box([width+0.25,0.42,0.04],owned ? 0x477A65 : 0xDDDCC9,[0,0.1,0],parent: titleNode,round: 0.015)
             plate.generateCollisionShapes(recursive: false)
-            node.addChild(text); regionPins.addChild(node)
-            regionMarkers.append((node,[Float(point.x),Float(point.z)]))
+            titleNode.addChild(text); regionPins.addChild(node)
+            regionMarkers.append((node,titleNode,[Float(point.x),Float(point.z)],width+0.25,city.id))
         }
         updateMapDetail()
+    }
+
+    // Illustrative alpine relief, not an elevation survey. The real horizontal
+    // footprints are preserved; every local surface uses this one height field.
+    private func andermattElevation(_ x: Float, _ z: Float) -> Float {
+        guard x > 20, x < 85, z > 795, z < 860 else { return 0 }
+        let axis: [SIMD2<Float>] = [[46,800],[51,810],[52,822],[33,841],[25,848]]
+        let point = SIMD2<Float>(x,z)
+        var distance = Float.greatestFiniteMagnitude
+        for i in 1..<axis.count {
+            let a = axis[i-1], delta = axis[i]-a
+            let fraction = max(0,min(1,simd_dot(point-a,delta)/simd_length_squared(delta)))
+            distance = min(distance,simd_distance(point,a+delta*fraction))
+        }
+        let slope = max(0,distance-3.2)
+        let rise = min(1,slope/18)
+        let eased = rise*rise*(3-2*rise)
+        let edge = min(min(x-20,85-x),min(z-795,860-z))
+        let fade = min(1,max(0,edge/6))
+        return eased * (14 + 1.4*sin(z*0.21) + 0.7*cos(x*0.3)) * fade*fade*(3-2*fade)
+    }
+
+    private func buildAndermattRelief() {
+        var positions: [SIMD3<Float>] = [], normals: [SIMD3<Float>] = []
+        var indices: [UInt32] = []
+        for x in stride(from: Float(20),to: 85,by: 1) {
+            for z in stride(from: Float(795),to: 860,by: 1) {
+                let corners: [SIMD3<Float>] = [[x,0,z],[x+1,0,z],[x+1,0,z+1],[x,0,z+1]]
+                let lifted = corners.map { SIMD3<Float>($0.x,andermattElevation($0.x,$0.z)-0.16,$0.z) }
+                for face in [[0,2,1],[0,3,2]] {
+                    let a = lifted[face[0]], b = lifted[face[1]], c = lifted[face[2]]
+                    let normal = simd_normalize(simd_cross(b-a,c-a))
+                    let start = UInt32(positions.count)
+                    positions.append(contentsOf: [a,b,c]); normals.append(contentsOf: [normal,normal,normal])
+                    indices.append(contentsOf: [start,start+1,start+2])
+                }
+            }
+        }
+        if let mesh = makeMesh(positions,normals,indices,name: "Andermatt illustrative valley") {
+            let node = ModelEntity(mesh: mesh,materials: [material(0x91A77D)])
+            town.addChild(node); mapTiles.append((node,[52.5,827.5],46,false))
+        }
     }
 
     private func buildSwissMountains() {
@@ -333,8 +381,8 @@ final class CityRenderer: NSObject, UIGestureRecognizerDelegate {
     private func focusRegion() {
         let center = Catalog.city(cityID).mapCenter
         target = [Float(center.x),0,Float(center.z) + (isZurich ? 4 : 0)]
-        radius = isZurich ? 32 : 22
-        yaw = 0.12; pitch = 0.9
+        radius = isZurich ? 32 : (cityID == "andermatt" ? 40 : 22)
+        yaw = 0.12; pitch = cityID == "andermatt" ? 0.65 : 0.9
         refreshReadiness()
         updateCamera()
     }
@@ -403,13 +451,31 @@ final class CityRenderer: NSObject, UIGestureRecognizerDelegate {
             "road":0xD6D2C4,"rail":0x929C94,"boundary":0xBAC59E,"terrain":0x94AA88,"rock":0xA7AA9C,"snow":0xEDF0E4]
         for source in tile.meshes {
             guard source.positions.count >= 9, source.positions.count % 3 == 0, source.indices.count % 3 == 0 else { continue }
-            let vertices = stride(from: 0,to: source.positions.count,by: 3).map {
+            var vertices = stride(from: 0,to: source.positions.count,by: 3).map {
                 SIMD3<Float>(source.positions[$0],source.positions[$0+1],source.positions[$0+2])
             }
             guard source.indices.allSatisfy({ Int($0) < vertices.count }) else { continue }
+            var indices = source.indices
+            if !country, center.x > 15, center.x < 90, center.y > 790, center.y < 865 {
+                if !source.kind.hasPrefix("building") && !source.kind.hasPrefix("roof") {
+                    var refined: [SIMD3<Float>] = []
+                    func triangle(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ depth: Int) {
+                        if depth < 7 && max(simd_distance(a,b),max(simd_distance(b,c),simd_distance(c,a))) > 1.2 {
+                            let ab = (a+b)/2, bc = (b+c)/2, ca = (c+a)/2
+                            triangle(a,ab,ca,depth+1); triangle(ab,b,bc,depth+1)
+                            triangle(ca,bc,c,depth+1); triangle(ab,bc,ca,depth+1)
+                        } else { refined.append(contentsOf: [a,b,c]) }
+                    }
+                    for i in stride(from: 0,to: indices.count,by: 3) {
+                        triangle(vertices[Int(indices[i])],vertices[Int(indices[i+1])],vertices[Int(indices[i+2])],0)
+                    }
+                    vertices = refined; indices = (0..<vertices.count).map(UInt32.init)
+                }
+                vertices = vertices.map { $0 + SIMD3<Float>(0,andermattElevation($0.x,$0.z),0) }
+            }
             var normals = [SIMD3<Float>](repeating: .zero,count: vertices.count)
-            for index in stride(from: 0,to: source.indices.count,by: 3) {
-                let a = Int(source.indices[index]), b = Int(source.indices[index+1]), c = Int(source.indices[index+2])
+            for index in stride(from: 0,to: indices.count,by: 3) {
+                let a = Int(indices[index]), b = Int(indices[index+1]), c = Int(indices[index+2])
                 let cross = simd_cross(vertices[b]-vertices[a],vertices[c]-vertices[a])
                 if simd_length_squared(cross) > 0.0000000001 {
                     normals[a] += cross; normals[b] += cross; normals[c] += cross
@@ -464,7 +530,7 @@ final class CityRenderer: NSObject, UIGestureRecognizerDelegate {
                 }
             }
             normals = normals.map { simd_length_squared($0) > 0 ? simd_normalize($0) : SIMD3<Float>(0,1,0) }
-            if let mesh = makeMesh(vertices,normals,source.indices,name: tile.id + source.kind) {
+            if let mesh = makeMesh(vertices,normals,indices,name: tile.id + source.kind) {
                 group.addChild(ModelEntity(mesh: mesh,materials: [material(palette[source.kind] ?? 0xD2C8AE)]))
             }
         }
@@ -482,7 +548,7 @@ final class CityRenderer: NSObject, UIGestureRecognizerDelegate {
     private func installMapLabels(_ labels: [RenderMap.Label]) {
         for label in labels {
             let node = Entity()
-            node.position = [label.x,0.65,label.z]
+            node.position = [label.x,0.65+andermattElevation(label.x,label.z),label.z]
             let mesh = MeshResource.generateText(label.name,extrusionDepth: 0.001,font: .systemFont(ofSize: 0.24,weight: .semibold))
             let text = ModelEntity(mesh: mesh,materials: [UnlitMaterial(color: UIColor(hex: 0x425B51))])
             let bounds = text.visualBounds(relativeTo: nil)
@@ -530,17 +596,34 @@ final class CityRenderer: NSObject, UIGestureRecognizerDelegate {
         }
         localRoutes.isEnabled = radius < 650
         nationalRoutes.isEnabled = radius >= 650
-        for (marker, position) in regionMarkers {
-            marker.isEnabled = radius > 180 && simd_distance(position,focus) < radius
+        let nextID = Catalog.cities.first { !unlockedRegions.contains($0.id) }?.id
+        func priority(_ id: String) -> Int {
+            if id == cityID { return 0 }
+            if id == nextID { return 1 }
+            return ["zurich", "bern", "basel", "geneva"].contains(id) ? 2 : 3
+        }
+        var occupied: [CGRect] = []
+        for entry in regionMarkers.sorted(by: { priority($0.id) < priority($1.id) }) {
+            let marker = entry.node
+            marker.isEnabled = radius > 180 && simd_distance(entry.position,focus) < radius
             marker.position.y = max(12,radius*0.012)
             marker.orientation = camera.orientation
-            marker.scale = SIMD3<Float>(repeating: max(2,radius*0.035))
+            let scale = max(2,radius*0.028)
+            marker.scale = SIMD3<Float>(repeating: scale)
+            entry.title.isEnabled = true
+            guard marker.isEnabled, let view,
+                  let left = view.project(marker.convert(position: [-entry.width/2,0.04,0],to: nil)),
+                  let right = view.project(marker.convert(position: [entry.width/2,0.58,0],to: nil)) else { continue }
+            let rect = CGRect(x: min(left.x,right.x)-4,y: min(left.y,right.y)-4,
+                              width: abs(right.x-left.x)+8,height: abs(right.y-left.y)+8)
+            if occupied.contains(where: { $0.intersects(rect) }) { entry.title.isEnabled = false }
+            else { occupied.append(rect) }
         }
         for (person, origin, _, _) in people {
             person.isEnabled = radius < 20 && simd_distance(SIMD2<Float>(origin.x,origin.z),focus) < 8
         }
         for (day, evening, center) in detailTiles {
-            let visible = radius < 28 && simd_distance(center,focus) < 13
+            let visible = radius < 55 && simd_distance(center,focus) < 26
             day.isEnabled = visible; evening.isEnabled = visible
         }
     }
@@ -583,7 +666,7 @@ final class CityRenderer: NSObject, UIGestureRecognizerDelegate {
                 node.generateCollisionShapes(recursive: true)
                 let phase = Double(index) / Double(owned.tier)*2
                 let pose = RouteMotion.pose(points: points,phase: time/route.duration+phase)
-                node.position = [Float(pose.x),route.kind == .plane ? 3 + Float(sin(pose.fraction * .pi))*5 : 0.025,Float(pose.z)]
+                node.position = [Float(pose.x),route.kind == .plane ? 3 + Float(sin(pose.fraction * .pi))*5 : 0.025 + andermattElevation(Float(pose.x),Float(pose.z)),Float(pose.z)]
                 node.orientation = simd_quatf(angle: Float(pose.heading),axis: [0,1,0])
                 node.isEnabled = radius < 650
                 traffic.addChild(node)
@@ -601,10 +684,19 @@ final class CityRenderer: NSObject, UIGestureRecognizerDelegate {
             let delta = b-a
             guard simd_length_squared(delta) > 0.000001 else { continue }
             let side = simd_normalize(SIMD3<Float>(delta.z,0,-delta.x))*width/2
-            let start = UInt32(vertices.count)
-            vertices.append(contentsOf: [a-side,a+side,b+side,b-side])
-            normals.append(contentsOf: Array(repeating: SIMD3<Float>(0,1,0),count: 4))
-            indices.append(contentsOf: [start,start+2,start+1,start,start+3,start+2])
+            let touchesValley = min(a.x,b.x) < 85 && max(a.x,b.x) > 20 && min(a.z,b.z) < 860 && max(a.z,b.z) > 795
+            let steps = parent === nationalRoutes || !touchesValley ? 1 : max(1,Int(ceil(simd_length(delta)/0.3)))
+            for step in 0..<steps {
+                let p = a + delta * (Float(step)/Float(steps))
+                let q = a + delta * (Float(step+1)/Float(steps))
+                let start = UInt32(vertices.count)
+                let corners = [p-side,p+side,q+side,q-side].map { point in
+                    point + SIMD3<Float>(0,parent === nationalRoutes ? 0 : andermattElevation(point.x,point.z),0)
+                }
+                vertices.append(contentsOf: corners)
+                normals.append(contentsOf: Array(repeating: SIMD3<Float>(0,1,0),count: 4))
+                indices.append(contentsOf: [start,start+2,start+1,start,start+3,start+2])
+            }
         }
         if let mesh = makeMesh(vertices,normals,indices,name: route.id) {
             let node = ModelEntity(mesh: mesh,materials: [UnlitMaterial(color: UIColor(hex: route.colorHex))])
@@ -613,7 +705,7 @@ final class CityRenderer: NSObject, UIGestureRecognizerDelegate {
         }
         if parent === nationalRoutes { return }
         for point in [points.first!,points.last!] {
-            let stop = box([0.08,0.012,0.08],0xFFF6D9,[Float(point.x),height+0.01,Float(point.z)],parent: traffic,round: 0.004)
+            let stop = box([0.08,0.012,0.08],0xFFF6D9,[Float(point.x),height+0.01+andermattElevation(Float(point.x),Float(point.z)),Float(point.z)],parent: traffic,round: 0.004)
             stop.name = "route:" + route.id
         }
     }
@@ -659,7 +751,7 @@ final class CityRenderer: NSObject, UIGestureRecognizerDelegate {
         time += elapsed * speed
         for vehicle in vehicles {
             let pose = RouteMotion.pose(points: vehicle.points, phase: time/vehicle.route.duration+vehicle.phase)
-            var y = vehicle.base
+            var y = vehicle.base + andermattElevation(Float(pose.x),Float(pose.z))
             if vehicle.route.kind == .plane { y = 3 + Float(sin(pose.fraction * .pi))*5 }
             if vehicle.route.kind == .ship && !reducedMotion { y += Float(sin(time*2+vehicle.phase))*0.002 }
             vehicle.node.isEnabled = radius < 650
@@ -670,6 +762,7 @@ final class CityRenderer: NSObject, UIGestureRecognizerDelegate {
         for (node, origin, phase, alongX) in people {
             let movement = Float(sin(time*0.12+Double(phase)))*0.03
             node.position = origin + SIMD3<Float>(alongX ? movement : 0,abs(Float(sin(time*5+Double(phase))))*0.001,alongX ? 0 : movement)
+            node.position.y += andermattElevation(node.position.x,node.position.z) - andermattElevation(origin.x,origin.z)
         }
     }
     private func updateCamera() {
@@ -721,5 +814,14 @@ final class CityRenderer: NSObject, UIGestureRecognizerDelegate {
             if entity.name.hasPrefix("route:") { onSelect?(String(entity.name.dropFirst(6))); return }
             hit = entity.parent
         }
+        // Suppressed labels keep a comfortable touch target around their dot.
+        let location = gesture.location(in: view)
+        var nearest: (String, CGFloat)?
+        for entry in regionMarkers where entry.node.isEnabled {
+            guard let projected = view.project(entry.node.convert(position: [0,-0.07,0],to: nil)) else { continue }
+            let distance = hypot(projected.x-location.x,projected.y-location.y)
+            if distance < 18 && distance < (nearest?.1 ?? 18) { nearest = (entry.id,distance) }
+        }
+        if let nearest { onRegionSelect?(nearest.0) }
     }
 }

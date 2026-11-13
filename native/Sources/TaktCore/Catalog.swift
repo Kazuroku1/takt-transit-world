@@ -95,7 +95,7 @@ public struct TransitRoute: Identifiable, Sendable {
         case .ship: return "Spielerisch angenäherte Seestrecke zwischen realen Anlegestellen."
         case .metro: return "Fiktive Erweiterung: Zürich hat keine Metro. Diese Strecke gehört zu deinem Spielnetz."
         case .cable: return "Fiktive Seilbahn für dein Spielnetz; kein reales Verkehrsangebot."
-        case .plane: return "Spielerische Verbindung zwischen realen Schweizer Flughäfen; kein realer Flugplan."
+        case .plane: return "Schematische Flugverbindung zwischen Schweizer Regionen; Flughäfen und Flugkorridore sind Spielinhalte."
         }
     }
 }

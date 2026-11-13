@@ -44,6 +44,10 @@ Weitere Zürcher Quellenangaben stehen in den Zürcher Quelldokumenten.
 Alle Ressourcen verwenden EPSG:2056 (LV95), Ursprung bei 8.5417 Grad Ost /
 47.3769 Grad Nord. Eine Spieleinheit entspricht 100 Metern; die Z-Achse zeigt
 nach Süden. Gebäudehöhen und Bergformen sind illustrativ, nicht vermessen.
+Andermatt erhält im Renderer zusätzlich ein schematisches Talrelief. Gelände,
+Strassen, Gebäude und Fahrzeuge verwenden dieselbe Höhenfunktion; dies ist
+keine amtliche Geländerekonstruktion. Gebäude an Hängen können vereinfacht
+geneigte Grundflächen besitzen. Die geografischen XY-Umrisse bleiben erhalten.
 Zehn ungefähre Gipfelmarker, acht Regionszentren und die übrigen
 interregionalen Spielverbindungen sind in SwissGeography.swift enthalten.
 Andermatt-Busse folgen vereinfachten OSM-Strassen, sind aber keine zugesicherte

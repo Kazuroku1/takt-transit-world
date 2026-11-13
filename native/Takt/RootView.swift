@@ -113,15 +113,22 @@ struct RootView: View {
             }.padding(.horizontal, 14).padding(.vertical, 8).hudSurface()
             Spacer(minLength: 0)
             HStack(spacing: 8) {
-                hudIcon("flag.checkered", "Aufgaben", "open-quests") { sheet = .quests }
-                    .hudSurface()
-                    .overlay(alignment: .topTrailing) {
+                Button { sheet = .quests } label: {
+                    Image(systemName: "flag.checkered")
+                        .font(.system(size: 18, weight: .semibold))
+                        .frame(width: 48, height: 48).hudSurface()
+                        .overlay(alignment: .topTrailing) {
                         if game.readyCount > 0 {
                             Text("\(game.readyCount)").font(.caption2.bold()).foregroundStyle(.white)
                                 .padding(5).background(TaktTheme.coral, in: Circle()).offset(x: 4, y: -4)
                                 .allowsHitTesting(false)
+                                .accessibilityHidden(true)
                         }
                     }
+                    .contentShape(Rectangle())
+                }.buttonStyle(.plain)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Aufgaben").accessibilityIdentifier("open-quests")
                     .accessibilityValue("\(game.readyCount) Belohnungen bereit")
                 hudIcon("slider.horizontal.3", "Einstellungen", "settings") { sheet = .settings }.hudSurface()
             }
@@ -186,8 +193,9 @@ struct RootView: View {
 
     private func hudIcon(_ symbol: String, _ label: String, _ identifier: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: symbol).font(.system(size: 18, weight: .semibold)).frame(width: 48, height: 48)
-        }.accessibilityLabel(label).accessibilityIdentifier(identifier)
+            Image(systemName: symbol).font(.system(size: 18, weight: .semibold))
+                .frame(width: 48, height: 48).contentShape(Rectangle())
+        }.buttonStyle(.plain).accessibilityLabel(label).accessibilityIdentifier(identifier)
     }
 
     @ViewBuilder private func sheetContent(_ destination: GameSheet) -> some View {
