@@ -21,6 +21,7 @@ final class TaktUITests: XCTestCase {
         second.tap()
         XCTAssertTrue(app.staticTexts["route-b33-owned"].waitForExistence(timeout: 3))
         closeSheet(in: app)
+        XCTAssertTrue(app.buttons["open-quests"].waitForExistence(timeout: 5))
         print("Quest control before opening: \(app.buttons["open-quests"].debugDescription)")
         app.buttons["open-quests"].tap()
         XCTAssertTrue(app.navigationBars["Deine Aufgaben"].waitForExistence(timeout: 5))

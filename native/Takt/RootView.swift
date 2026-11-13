@@ -127,7 +127,6 @@ struct RootView: View {
                     }
                     .contentShape(Rectangle())
                 }.buttonStyle(.plain)
-                    .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Aufgaben").accessibilityIdentifier("open-quests")
                     .accessibilityValue("\(game.readyCount) Belohnungen bereit")
                 hudIcon("slider.horizontal.3", "Einstellungen", "settings") { sheet = .settings }.hudSurface()
