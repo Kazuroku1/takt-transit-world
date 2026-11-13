@@ -1,0 +1,87 @@
+ARBEITSSTAND ZUM HERUNTERFAHREN — 13. NOVEMBER 2026, VOR 14:59
+
+NEUER AUFTRAG
+Die native SwiftUI-/RealityKit-Version wesentlich detaillierter und schöner
+gestalten: echte ganze Städte statt generischem Raster, grosse erkundbare Karte.
+Map-first-Oberfläche nach dem allgemeinen Bedienprinzip von Builderment:
+aktive Karte im Vollbild, schwebende Bedienelemente direkt darüber, keine
+separate untere Tab-Leiste. Feste Linien weiterhin nur kaufen/freischalten.
+Für Recherche nur GPT-6 Astra verwenden, kein Antigravity.
+
+ZEITGRENZE
+Der Nutzer fährt den PC um 14:59 herunter. Der vollständige Umbau und ein neuer
+Xcode-Testlauf waren im verbleibenden Zeitfenster nicht möglich. Deshalb wurde
+die geprüfte Swift-App nicht durch ungetestete Änderungen ersetzt.
+
+LETZTER FUNKTIONIERENDER STAND
+Native App: native/Takt.xcodeproj, SwiftUI + RealityKit, iOS 17+.
+14 Kern- und 3 UI-Tests zuletzt erfolgreich. Details: native/VALIDIERUNG.txt.
+Geräte-IPA: build/Takt-Native.ipa.
+Simulator: build/Takt-Simulator.zip.
+GitHub: https://github.com/Kazuroku1/takt-transit-world
+T3-Gerätezugriff aktiv, aber nur Windows-Host vorhanden; kein Mac/iOS-Simulator
+im T3-Gerätefenster verfügbar. Native Tests liefen über den kostenlosen
+Standard-Mac-Runner des öffentlichen GitHub-Repositories.
+SideStore/LiveContainer weiterhin nicht installieren (Sicherheitsprüfung offen).
+
+BESTÄTIGTE REALE GEODATENQUELLE
+Die Astra-Recherche hat eine funktionierende amtliche GeoJSON-Quelle gefunden:
+https://data.stadt-zuerich.ch/dataset/geo_amtliche_vermessung_stadt_zuerich
+Lizenz laut CKAN-Katalog: CCZero.
+WFS:
+https://www.ogd.stadt-zuerich.ch/wfs/geoportal/Amtliche_Vermessung_Stadt_Zuerich
+
+GetFeature-Beispiel (mit maxFeatures=2 tatsächlich getestet):
+https://www.ogd.stadt-zuerich.ch/wfs/geoportal/Amtliche_Vermessung_Stadt_Zuerich?service=WFS&version=1.1.0&request=GetFeature&typeName=av_bo_allegebaeude_a_v&outputFormat=GeoJSON&srsName=EPSG:4326&maxFeatures=2
+
+Relevante Layer:
+- av_bo_allegebaeude_a_v: echte Gebäude-MultiPolygone; art_txt und baujahr,
+  aber keine Gebäudehöhe. Höhen dürfen daher nicht als vermessen ausgegeben werden.
+- av_bo_boflaeche_a: Bodenbedeckungsflächen, art_txt enthält u.a. Gärten,
+  Wasser und Strassenflächen.
+- av_ge_gemeindegrenze_a: Gemeindegrenze.
+- av_geb_strassenstueck: Strassen-Mittellinien.
+
+Amtliche Stadt-Ausdehnung laut WFS:
+Längengrad 8.44689 bis 8.627212; Breitengrad 47.319033 bis 47.435141.
+Sinnvolle erste Spielausdehnung: 8.44–8.63, 47.31–47.44.
+Damit sind Altstetten, Oerlikon, HB, Altstadt und Wollishofen abgedeckt.
+Geodaten einmal bei der Erstellung herunterladen und offline bündeln;
+öffentliche WFS-/Overpass-Server nicht als laufenden Spiele-Backend benutzen.
+Noch ausstehend: vollständige Mengen, Attribution im Detail, Höhenquelle,
+Terrain und Liniengeometrien sowie LOD-/Kachel-Verarbeitung.
+
+BUILDERMENT-RECHERCHE (OFFIZIELLE SCREENSHOTS VISUELL GEPRÜFT)
+https://apps.apple.com/us/app/builderment/id1558592038
+https://builderment.com/press/index.html
+
+Beobachtet: durchgehende Vollbild-Welt, kleine Ressourcen-Chips oben links,
+Forschung/Einstellungen oben rechts, primärer Bauhammer unten rechts,
+keine Tab-Bar. HARVEST/BUILD-Banner sind Werbeeinblendungen in den Screenshots,
+nicht Elemente der eigentlichen Spieloberfläche. Keine fremden Assets kopieren.
+
+KONKRETE NÄCHSTE UMSETZUNG
+1. RootView auf ZStack mit NativeCityView.ignoresSafeArea umstellen.
+   TabView, ScrollView der Stadtseite und die 420-Punkt-Kartenbegrenzung entfernen.
+2. Innerhalb der Safe Areas: Stadt/Währungsanzeige oben links; Aufgaben und
+   Einstellungen oben rechts; primärer '+ Linie'-Knopf unten rechts;
+   kleine Flotten-/Kameraaktionen am Rand. Stadtname öffnet Städteauswahl.
+3. Vorhandene Linien-, Flotten-, Aufgaben- und Weltansichten als Sheets öffnen;
+   die Karte bleibt die Hauptansicht. Kein separates unteres Menü.
+4. Kartengesten: ein Finger verschiebt, Pinch zoomt, Zwei-Finger-Drehung rotiert;
+   'Ganze Stadt' und Ortssuche/Kamera-Fokus statt nur Zoom um denselben Mittelpunkt.
+5. Amtliche GeoJSON-Daten in lokale Meterkoordinaten projizieren, in Kacheln
+   aufteilen, Gebäude-Footprints extrudieren und Geometrie nach Material bündeln.
+   Sichtbarkeits-/Detailstufen für zehntausende Gebäude vorsehen.
+6. Reale Limmat, Sihl, Zürichsee, Strassen und Quartiere zuerst; zentrale
+   Wahrzeichen detaillierter ergänzen. Keine weitere generische Rasterstadt.
+7. Vorhandene festen Verkehrslinien auf passende reale Wege legen. Datenbasierte
+   und für das Spiel angenäherte Teile klar auseinanderhalten.
+8. UI-Tests von TabBar-Selektoren auf die neuen Kartenaktionen umstellen,
+   Pan/Zoom/Übersicht und Sheet-Rückkehr testen; Cloud-Build plus Screenshot-QA.
+
+WICHTIGER REALITYKIT-BEFUND AUS DER VORIGEN UMSETZUNG
+Kein massenhaftes Austauschen geteilter Fenstermaterialien im laufenden Renderer.
+Das verursachte auf dem iOS-18.5-Simulator einen CoreRE-Absturz. Die derzeitige
+Version verwendet vorbereitete Tages-/Nachtfenstergruppen und schaltet deren
+Sichtbarkeit um. Den bestehenden Nachtmodus-Regressionscheck beibehalten.
