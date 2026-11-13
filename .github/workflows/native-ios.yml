@@ -1,0 +1,68 @@
+name: Takt Swift - iPhone und Simulator
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: takt-native-ios
+  cancel-in-progress: true
+
+jobs:
+  native:
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode 26
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+      - name: Native Spielregeln testen
+        run: swift test --package-path native
+      - name: iPhone- und Simulator-App bauen
+        run: bash scripts/build-native-ios.sh
+      - name: iPhone-Simulator vorbereiten
+        id: simulator
+        run: |
+          xcrun simctl list devices available -j > /tmp/takt-devices.json
+          SIM_ID=$(python3 -c 'import json; d=json.load(open("/tmp/takt-devices.json")); print(next(v["udid"] for k,vs in d["devices"].items() if "iOS" in k for v in vs if "iPhone" in v["name"]))')
+          echo "id=$SIM_ID" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$SIM_ID"
+          xcrun simctl bootstatus "$SIM_ID" -b
+          xcrun simctl status_bar "$SIM_ID" override --time '9:41' --batteryState charged --batteryLevel 100
+      - name: Nativen Spielstart im iPhone-Simulator testen
+        env:
+          SIM_ID: ${{ steps.simulator.outputs.id }}
+        run: |
+          xcodebuild test -project native/Takt.xcodeproj -scheme Takt \
+            -destination "platform=iOS Simulator,id=$SIM_ID" \
+            -derivedDataPath build/native/ui-tests \
+            -resultBundlePath build/NativeTests.xcresult \
+            -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO
+      - name: Screenshots aus Tests exportieren
+        if: always()
+        run: |
+          if [ -d build/NativeTests.xcresult ]; then
+            xcrun xcresulttool export attachments --path build/NativeTests.xcresult --output-path build/native-screenshots
+          fi
+      - name: Native App-Pakete
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Takt-Swift-iPhone-Simulator
+          path: |
+            build/Takt-Native.ipa
+            build/Takt-Simulator.zip
+          if-no-files-found: warn
+          retention-days: 1
+      - name: Testergebnisse und Screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Takt-Swift-Tests
+          path: |
+            build/NativeTests.xcresult
+            build/native-screenshots
+          if-no-files-found: warn
+          retention-days: 1

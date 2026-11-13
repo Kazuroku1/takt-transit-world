@@ -13,3 +13,6 @@ build/
 test-results/
 *.tsbuildinfo
 ios/capacitor-cordova-ios-plugins/
+native/.build/
+native/.swiftpm/
+native/**/xcuserdata/
