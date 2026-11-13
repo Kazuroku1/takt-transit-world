@@ -3,7 +3,7 @@ import XCTest
 final class TaktUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
     override func tearDownWithError() throws {
-        if testRun?.hasSucceeded == false { capture("Fehlgeschlagener Ablauf") }
+        if (testRun?.failureCount ?? 0) > 0 { capture("Fehlgeschlagener Ablauf") }
     }
     func testMountainBusesQuestAndUpgrade() throws {
         let app = XCUIApplication()
@@ -21,8 +21,9 @@ final class TaktUITests: XCTestCase {
         second.tap()
         XCTAssertTrue(app.staticTexts["route-b33-owned"].waitForExistence(timeout: 3))
         closeSheet(in: app)
+        let wallet = app.descendants(matching: .any).matching(identifier: "wallet").firstMatch
+        XCTAssertTrue(wallet.label.contains("Guthaben 650 Münzen"), "Scrolling must not purchase a vehicle")
         XCTAssertTrue(app.buttons["open-quests"].waitForExistence(timeout: 5))
-        print("Quest control before opening: \(app.buttons["open-quests"].debugDescription)")
         app.buttons["open-quests"].tap()
         XCTAssertTrue(app.navigationBars["Deine Aufgaben"].waitForExistence(timeout: 5))
         let reward = app.buttons["claim-second"]
@@ -158,8 +159,10 @@ final class TaktUITests: XCTestCase {
         XCTAssertTrue(scroll.waitForExistence(timeout: 5))
         for _ in 0..<12 {
             if element.exists && element.isHittable { return }
-            let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.72))
-            let end = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.42))
+            // Stay in the empty outer gutter, never press a purchase button
+            // while initiating a synthetic scroll gesture.
+            let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.78))
+            let end = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.38))
             start.press(forDuration: 0.05, thenDragTo: end)
         }
         capture("Element nicht erreichbar")
