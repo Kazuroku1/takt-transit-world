@@ -1,3 +1,15 @@
+HINWEIS ZUR NEUEN NATIVEN SWIFT-VERSION (13. NOVEMBER 2026)
+
+Die neue iPhone-App liegt im Xcode-Projekt native/Takt.xcodeproj.
+Gerätedatei: build/Takt-Native.ipa (benötigt eine Gerätesignierung).
+Simulator-Paket: build/Takt-Simulator.zip (benötigt einen Mac mit Xcode).
+Details stehen in README.md und native/SIMULATOR-HINWEISE.txt.
+
+Die Einrichtung von SideStore/LiveContainer bleibt auf deinen Wunsch bis zur
+Klärung der Sicherheitsbefunde ausgesetzt. Es wurde damit nichts installiert.
+
+Die folgende ältere AltStore-Anleitung gehört zum bisherigen Hybrid-Prototyp:
+
 TAKT AUF DEIN IPHONE INSTALLIEREN — KOSTENLOS MIT WINDOWS
 
 Du brauchst:

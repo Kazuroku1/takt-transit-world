@@ -83,7 +83,7 @@ npm run preview
 
 Die Städte sind stilisierte Miniaturwelten. Sie verwenden in dieser Beta dieselbe Strassengrundstruktur mit variierten Gebäuden und lokalisierten Haltestellennamen, keine geografisch originalgetreuen ÖV-Netze. Im Hintergrund oder bei geschlossener App pausiert die Simulation. Kein Konto, Server, Abo oder In-App-Kauf erforderlich.
 
-## Kostenlos aufs iPhone, mit Windows
+## Legacy-Prototyp: Kostenlos aufs iPhone, mit Windows
 
 Für den persönlichen Test ist kein bezahltes Entwicklerkonto nötig. Der vorbereitete Workflow `.github/workflows/ios-sideload.yml` baut auf einem GitHub-Mac eine unsignierte `Takt.ipa`. **AltStore Classic / AltServer für Windows** signiert und installiert sie anschliessend mit einem normalen Apple-Konto. Diese Fassung ist eine separat installierte Capacitor-Hybrid-App; es wird keine Safari-Verknüpfung verwendet.
 
@@ -98,7 +98,7 @@ Für den persönlichen Test ist kein bezahltes Entwicklerkonto nötig. Der vorbe
 
 Der erste [Cloud-Build mit Xcode 26](https://github.com/Kazuroku1/takt-transit-world/actions/runs/40695807396) hat das iPhone-Archiv und `Takt.ipa` erfolgreich erzeugt. Die lokal heruntergeladene Installationsdatei liegt in `build/Takt.ipa`. Die Installation auf einem physischen iPhone muss noch mit AltStore durchgeführt werden. Eine kurze Anleitung steht in `INSTALLATION.txt`.
 
-## Optional: TestFlight mit Entwickler-Mitgliedschaft
+## Legacy-Prototyp: Optional TestFlight mit Entwickler-Mitgliedschaft
 
 Das Xcode-Projekt liegt unter `ios/App/App.xcodeproj`. App-ID: `ch.takt.transitworld`. App-Icon und Startbild sind enthalten. Das native Projekt verwendet Swift Package Manager; CocoaPods ist nicht nötig.
 

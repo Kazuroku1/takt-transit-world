@@ -1,4 +1,4 @@
-name: iPhone-App bauen (AltStore)
+name: Legacy Hybrid-Prototyp - iPhone
 
 on:
   workflow_dispatch:

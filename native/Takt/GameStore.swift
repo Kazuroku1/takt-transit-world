@@ -59,7 +59,9 @@ final class GameStore: ObservableObject {
         let elapsed = now.timeIntervalSince(lastTick); lastTick = now
         guard active, speed > 0 else { return }
         let oldLevel = state.level
-        GameRules.advance(&state, by: min(1.5,max(0,elapsed)) * speed, day: day)
+        var next = state
+        GameRules.advance(&next, by: min(1.5,max(0,elapsed)) * speed, day: day)
+        state = next
         tickCount += 1
         if tickCount % 5 == 0 { save() }
         if state.level > oldLevel { notify("Level \(state.level)! Dein Netz wächst.") }
@@ -72,7 +74,9 @@ final class GameStore: ObservableObject {
     func perform(_ action: GameAction) {
         let oldLevel = state.level
         do {
-            try GameRules.apply(action, to: &state, day: day)
+            var next = state
+            try GameRules.apply(action, to: &next, day: day)
+            state = next
             save()
             let text: String
             switch action {
@@ -85,7 +89,12 @@ final class GameStore: ObservableObject {
         } catch { notify(error.localizedDescription, success: false) }
     }
     func changeSettings(_ update: (inout GameSettings) -> Void) {
-        update(&state.settings); save()
+        // A Toggle may read its binding synchronously while Combine publishes.
+        // Mutate a local value first, then publish one completed snapshot.
+        var next = state
+        update(&next.settings)
+        state = next
+        save()
     }
     func reset() {
         state = GameState(); selectedRoute = nil; speed = 1; save()

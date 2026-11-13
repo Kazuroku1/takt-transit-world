@@ -44,6 +44,7 @@ jobs:
         run: |
           if [ -d build/NativeTests.xcresult ]; then
             xcrun xcresulttool export attachments --path build/NativeTests.xcresult --output-path build/native-screenshots
+            xcrun xcresulttool export diagnostics --path build/NativeTests.xcresult --output-path build/native-diagnostics || true
           fi
       - name: Native App-Pakete
         if: always()
@@ -63,5 +64,6 @@ jobs:
           path: |
             build/NativeTests.xcresult
             build/native-screenshots
+            build/native-diagnostics
           if-no-files-found: warn
           retention-days: 1
