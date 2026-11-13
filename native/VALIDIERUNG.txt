@@ -1,0 +1,45 @@
+TAKT SWIFT 0.2.0 — VALIDIERUNG VOM 13. NOVEMBER 2026
+
+Getesteter App-Quellstand:
+4c6e3abc18cb14e9ea2ea332acb98e74aea2fcc6
+
+Erfolgreicher Build und Testlauf:
+https://github.com/Kazuroku1/takt-transit-world/actions/runs/43433811486
+
+Ergebnis:
+- 14 Swift-Kerntests bestanden, 0 Fehler.
+- 3 native XCTest-Bedienungsabläufe bestanden, 0 Fehler.
+- Release-Archiv für ARM64-iPhones erfolgreich gebaut.
+- Simulator-App für arm64 und x86_64 erfolgreich gebaut.
+- UI-Testgerät: iPhone 16 Pro, Simulator mit iOS 18.5, Xcode 26.3.
+
+Geprüfte Bedienungsabläufe:
+- Erste Stadt öffnen und native RealityKit-Szene anzeigen.
+- Zweite Buslinie kaufen und Quest-Belohnung abholen.
+- Tram freischalten, Tram-Quest abholen und Buslinie ausbauen.
+- Weltkarte, Fahrzeugauswahl und Einstellungen öffnen.
+- Abendstimmung einschalten, Switch-Zustand prüfen, zur Stadt zurückkehren
+  und den Nachtmodus anhand des UI-Zustands bestätigen.
+- Alle sieben Verkehrsmittel in der nativen Szene darstellen.
+- Screenshots von Stadt, Nachtmodus, Linien, Flotte, Welt und Einstellungen.
+
+Die Screenshots wurden visuell kontrolliert. Ein beim Test gefundener Absturz
+in RealityKits Materialaktualisierung wurde durch vorbereitete Tages-/Nacht-
+Fenstergruppen behoben. Der anschliessende Nachtmodus-Test besteht.
+
+Artefakte im Projektordner:
+build/Takt-Native.ipa
+build/Takt-Simulator.zip
+build/native-preview/
+build/native-validation/final-validation.json
+
+Abgrenzung:
+Die Tests liefen auf einem Mac-Runner des öffentlichen GitHub-Repositories.
+Der T3-Gerätezugriff ist aktiv, aber auf dem hier verbundenen Windows-Laptop
+ist kein iOS-Simulator verfügbar. Es ist kein Mac-Gerätehost verbunden.
+Der interaktive Test im T3-Gerätefenster bleibt deshalb offen.
+
+Nicht durchgeführt: Test auf einem physischen iPhone, langfristige Akku- oder
+Leistungsmessung, iPad-Bedienungstest und TestFlight-Verteilung.
+Die native Geräte-IPA muss für ein persönliches Gerät noch signiert werden.
+SideStore und LiveContainer wurden nicht installiert.

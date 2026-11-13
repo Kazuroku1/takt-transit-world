@@ -35,6 +35,12 @@ mit einer Simulator-App für Apple Silicon und Intel. Das Cloud-Workflow
 und XCTest-Bedienabläufe auf einem iPhone-Simulator aus. Der Workflow startet
 manuell; auf unserem öffentlichen Repository werden Standard-GitHub-Runner benutzt.
 
+Der [native Prüflauf vom 13. November 2026](https://github.com/Kazuroku1/takt-transit-world/actions/runs/43433811486)
+ist erfolgreich: 14 Kerntests und 3 native Bedienungsabläufe bestanden, inklusive
+Käufen, Belohnungen, Ausbau und aktiviertem Nachtmodus. Einzelheiten und Grenzen
+stehen in `native/VALIDIERUNG.txt`; die geprüften Screenshots liegen lokal unter
+`build/native-preview/`. Auf einem physischen iPhone wurde noch nicht getestet.
+
 T3 Code: **Settings → Integrations → Devices → Agent device access** aktivieren.
 Die Einstellung wird gegebenenfalls erst in einer neuen Agent-Sitzung wirksam.
 Zusätzlich muss ein Mac mit Xcode als Gerätehost verbunden sein. Die Geräteprüfung
