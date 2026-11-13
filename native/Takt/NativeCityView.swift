@@ -52,11 +52,11 @@ final class CityRenderer: NSObject {
     private var onSelect: ((String) -> Void)?
     private var yaw: Float = 0.75
     private var pitch: Float = 0.62
-    private var radius: Float = 72
+    private var radius: Float = 80
     private var target = SIMD3<Float>(0,0,0)
     private var startYaw: Float = 0
     private var startPitch: Float = 0
-    private var startRadius: Float = 72
+    private var startRadius: Float = 80
     private var night = false
     private var seed: UInt64 = 1234
     private var meshes: [String: MeshResource] = [:]
@@ -111,7 +111,7 @@ final class CityRenderer: NSObject {
             town.children.removeAll(); traffic.children.removeAll(); people.removeAll(); windows.removeAll(); boats.removeAll()
             seed = state.cityID.utf8.reduce(UInt64(1234)) { $0 &* 31 &+ UInt64($1) }
             buildTown(city: state.currentCity)
-            target = .zero; radius = 72; yaw = 0.75; pitch = 0.62
+            target = .zero; radius = 80; yaw = 0.75; pitch = 0.62
             updateCamera()
         }
         if night != state.settings.night || signature.isEmpty {
@@ -137,7 +137,7 @@ final class CityRenderer: NSObject {
         if command.id != commandID {
             commandID = command.id
             switch command.action {
-            case .reset: target = .zero; radius = 72; yaw = 0.75; pitch = 0.62
+            case .reset: target = .zero; radius = 80; yaw = 0.75; pitch = 0.62
             case .zoomIn: radius = max(25,radius - 8)
             case .zoomOut: radius = min(105,radius + 8)
             }
@@ -279,11 +279,27 @@ final class CityRenderer: NSObject {
     }
     private func hills() {
         for (x,z,h,s): (Float,Float,Float,Float) in [(-13,-14,4.2,2.4),(-16,-13.5,3.1,2.1),(-12,-16,5,2.3)] {
-            let hill = box([s,h,s],0x94AC82,[x,h/2-0.5,z],round: 0.6)
-            hill.orientation = simd_quatf(angle: .pi/4, axis: [0,1,0])
-            sphere(0.6,0xDCE3CC,[x,h-0.3,z])
+            mountain(radius: s, height: h, color: 0x94AC82, position: [x,-0.4,z])
+            mountain(radius: s*0.21, height: h*0.21, color: 0xE5E7D5, position: [x,h*0.79-0.4,z])
         }
         box([0.75,0.7,0.75],0xDAB98F,[-15,3.6,-15])
+    }
+    private func mountain(radius: Float, height: Float, color: UInt32, position: SIMD3<Float>) {
+        var vertices: [SIMD3<Float>] = [], normals: [SIMD3<Float>] = []
+        for index in 0..<7 {
+            let a = Float(index) * 2 * .pi / 7, b = Float(index+1) * 2 * .pi / 7
+            let p = SIMD3<Float>(cos(a)*radius,0,sin(a)*radius), q = SIMD3<Float>(0,height,0), r = SIMD3<Float>(cos(b)*radius,0,sin(b)*radius)
+            let normal = simd_normalize(simd_cross(q-p,r-p))
+            vertices.append(contentsOf: [p,q,r]); normals.append(contentsOf: [normal,normal,normal])
+        }
+        var descriptor = MeshDescriptor(name: "Mountain")
+        descriptor.positions = .init(vertices)
+        descriptor.normals = .init(normals)
+        descriptor.primitives = .triangles((0..<vertices.count).map(UInt32.init))
+        if let mesh = try? MeshResource.generate(from: [descriptor]) {
+            let entity = ModelEntity(mesh: mesh, materials: [material(color)])
+            entity.position = position; town.addChild(entity)
+        }
     }
     private func landmark(_ city: String) {
         // Different silhouettes give each unlocked city a recognisable centre.

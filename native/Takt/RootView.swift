@@ -136,10 +136,11 @@ struct CityPage: View {
                         .accessibilityIdentifier("native-city")
                     VStack {
                         HStack {
-                            HStack(spacing: 6) { Circle().fill(TaktTheme.green).frame(width: 6, height: 6); Eyebrow(text: game.speed == 0 ? "Zeit zum Durchatmen" : "Deine Stadt lebt") }
+                            HStack(spacing: 6) { Circle().fill(TaktTheme.green).frame(width: 6, height: 6); Eyebrow(text: game.speed == 0 ? "Zeit zum Durchatmen" : "Deine Stadt lebt", color: game.state.settings.night ? .white.opacity(0.8) : TaktTheme.muted) }
                             Spacer()
                             Label("Tag \(Int(game.state.seconds / 240) + 1)", systemImage: game.state.settings.night ? "moon.stars.fill" : "sun.max.fill")
                                 .font(.caption2.weight(.medium)).foregroundStyle(game.state.settings.night ? .white.opacity(0.8) : TaktTheme.muted)
+                                .accessibilityLabel(game.state.settings.night ? "Nachtmodus" : "Tagesmodus").accessibilityIdentifier("city-lighting")
                         }
                         if let event = game.state.event {
                             HStack { Image(systemName: "bolt.fill"); Text("\(event.title) +50 % Einnahmen"); Spacer(); Text("\(max(0,Int(event.endsAt-game.state.seconds))) s").monospacedDigit() }
@@ -508,10 +509,10 @@ struct SettingsPage: View {
             .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
                 do { pendingImport = try game.readImport(result.get()) } catch { game.notify("Dieser Spielstand konnte nicht gelesen werden.", success: false) }
             }
-            .alert("Spielstand ersetzen?", isPresented: Binding(get: { pendingImport != nil }, set: { if !$0 { pendingImport = nil } })) {
+            .alert("Spielstand ersetzen?", isPresented: Binding(get: { pendingImport != nil }, set: { if !$0 { pendingImport = nil } }), presenting: pendingImport) { imported in
                 Button("Abbrechen", role: .cancel) { pendingImport = nil }
-                Button("Importieren", role: .destructive) { if let pendingImport { game.acceptImport(pendingImport) }; pendingImport = nil }
-            } message: { Text("Dein aktuelles Verkehrsnetz wird durch den ausgewählten Swift-Spielstand ersetzt.") }
+                Button("Importieren", role: .destructive) { game.acceptImport(imported); pendingImport = nil }
+            } message: { _ in Text("Dein aktuelles Verkehrsnetz wird durch den ausgewählten Swift-Spielstand ersetzt.") }
             .sheet(item: $share) { ShareView(url: $0.url) }
         }
     }

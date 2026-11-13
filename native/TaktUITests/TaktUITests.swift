@@ -48,9 +48,16 @@ final class TaktUITests: XCTestCase {
         app.buttons["Fertig"].tap()
         app.buttons["settings"].tap()
         XCTAssertTrue(app.switches["Abendstimmung"].waitForExistence(timeout: 5))
-        app.switches["Abendstimmung"].tap()
+        let nightSwitch = app.switches["Abendstimmung"]
+        nightSwitch.coordinate(withNormalizedOffset: CGVector(dx: 0.92,dy: 0.5)).tap()
+        XCTAssertEqual(nightSwitch.value as? String,"1")
+        capture("Native Einstellungen")
         app.buttons["Fertig"].tap()
         app.tabBars.buttons["Stadt"].tap()
+        let lighting = app.descendants(matching: .any).matching(identifier: "city-lighting").firstMatch
+        XCTAssertTrue(lighting.waitForExistence(timeout: 5))
+        XCTAssertEqual(lighting.label,"Nachtmodus")
+        sleep(1)
         capture("Native Abendstimmung")
     }
     func testAllNativeVehiclesRender() throws {

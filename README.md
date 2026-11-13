@@ -35,11 +35,14 @@ mit einer Simulator-App für Apple Silicon und Intel. Das Cloud-Workflow
 und XCTest-Bedienabläufe auf einem iPhone-Simulator aus. Der Workflow startet
 manuell; auf unserem öffentlichen Repository werden Standard-GitHub-Runner benutzt.
 
-T3 Code: **Settings → Integrations → Devices → Agent device access** aktivieren
-und danach eine neue Agent-Sitzung starten. Erst wenn `device_list` einen
-iOS-Simulator liefert, kann die App im T3-Gerätefenster installiert und bedient
-werden. Das Vorhandensein des Gerätemenüs allein bedeutet auf Windows noch
-nicht, dass ein iOS-Gerätehost verbunden ist.
+T3 Code: **Settings → Integrations → Devices → Agent device access** aktivieren.
+Die Einstellung wird gegebenenfalls erst in einer neuen Agent-Sitzung wirksam.
+Zusätzlich muss ein Mac mit Xcode als Gerätehost verbunden sein. Die Geräteprüfung
+dieses Windows-Laptops liefert aktuell keinen iOS-Simulator: „iOS Simulators need
+macOS with Xcode.“ Erst wenn `device_list` ein passendes Gerät liefert, können
+`device_open` und der zurückgegebene `agent-device`-Befehl es im T3-Gerätefenster
+öffnen und bedienen. Für Builds und die XCTest-Prüfungen wird hier der kostenlose
+Mac-Runner des öffentlichen GitHub-Repositories verwendet.
 
 Der native Swift-Spielstand ist ein neues Format; vorhandene Browser-Spielstände
 werden nicht automatisch übernommen. Zur Dateiübertragung die Exportfunktion

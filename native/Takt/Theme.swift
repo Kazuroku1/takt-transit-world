@@ -26,9 +26,10 @@ extension UIColor {
 
 struct Eyebrow: View {
     let text: String
+    var color = TaktTheme.muted
     var body: some View {
         Text(text.uppercased()).font(.system(size: 10, weight: .semibold, design: .rounded))
-            .tracking(1.5).foregroundStyle(TaktTheme.muted)
+            .tracking(1.5).foregroundStyle(color)
     }
 }
 struct Card<Content: View>: View {

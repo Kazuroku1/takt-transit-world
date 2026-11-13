@@ -1,0 +1,33 @@
+TAKT — NATIVE SWIFT-APP IM T3-SIMULATOR
+
+Projekt: native/Takt.xcodeproj
+Scheme: Takt
+Bundle-ID: ch.takt.transitworld
+Mindestversion: iOS 17
+Technik: SwiftUI + RealityKit, lokales Swift-Paket TaktCore.
+
+T3-Geräteprüfung vom 13. November 2026:
+Agent device access ist eingeschaltet. Als Gerätehost wird nur dieser
+Windows-Laptop angezeigt. iOS ist dort nicht verfügbar:
+"iOS Simulators need macOS with Xcode."
+Es wurde daher in dieser Sitzung kein T3-iOS-Simulator geöffnet.
+
+Wenn ein Mac mit Xcode als T3-Gerätehost verfügbar ist:
+1. Mit device_list den hostId und die konkrete iOS-Geräte-ID ermitteln.
+2. Mit device_open genau diesen Host und dieses Gerät öffnen.
+3. Die native Takt.app aus dem Simulator-Paket auf dem Gerätehost installieren.
+   Alternativ dort das Xcode-Projekt für den gewählten Simulator bauen.
+4. Zum Öffnen, Bedienen und Aufzeichnen ausschliesslich den von device_open
+   zurückgegebenen, an dieses Gerät gebundenen agent-device-Befehl verwenden.
+5. Mit device_screenshot den tatsächlichen Bildschirm überprüfen.
+
+Ein iPhone-IPA lässt sich nicht als Simulator-App installieren. Dafür wird
+Takt-Simulator.zip mit Takt.app benötigt. Das Simulator-Paket enthält arm64
+und x86_64; die Geräte-IPA ist dagegen für ein echtes iPhone vorgesehen.
+
+Die GitHub-Actions-Prüfung ist ein separater automatischer XCTest-Lauf.
+Sie ist kein im T3-Gerätefenster verfügbarer, interaktiver Simulator-Host.
+
+Keine kostenpflichtigen Gerätehosts oder Sideloading-Programme ohne neue
+Anweisung einrichten. Die zuvor besprochenen SideStore/LiveContainer-
+Installationen bleiben ausgesetzt.

@@ -30,14 +30,13 @@ jobs:
           echo "id=$SIM_ID" >> "$GITHUB_OUTPUT"
           xcrun simctl boot "$SIM_ID"
           xcrun simctl bootstatus "$SIM_ID" -b
-          xcrun simctl status_bar "$SIM_ID" override --time '9:41' --batteryState charged --batteryLevel 100
       - name: Nativen Spielstart im iPhone-Simulator testen
         env:
           SIM_ID: ${{ steps.simulator.outputs.id }}
         run: |
           xcodebuild test -project native/Takt.xcodeproj -scheme Takt \
             -destination "platform=iOS Simulator,id=$SIM_ID" \
-            -derivedDataPath build/native/ui-tests \
+            -derivedDataPath build/native/simulator-derived \
             -resultBundlePath build/NativeTests.xcresult \
             -parallel-testing-enabled NO ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO
       - name: Screenshots aus Tests exportieren
