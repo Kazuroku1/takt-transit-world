@@ -40,6 +40,8 @@ final class CityRenderer: NSObject {
     private let fill = DirectionalLight()
     private let town = Entity()
     private let traffic = Entity()
+    private let dayWindows = Entity()
+    private let nightWindows = Entity()
     private var displayLink: CADisplayLink?
     private var lastFrame: CFTimeInterval = 0
     private var time: Double = 0
@@ -61,7 +63,6 @@ final class CityRenderer: NSObject {
     private var seed: UInt64 = 1234
     private var meshes: [String: MeshResource] = [:]
     private var materials: [UInt32: SimpleMaterial] = [:]
-    private var windows: [ModelEntity] = []
     private var people: [(Entity, SIMD3<Float>, Float, Bool)] = []
     private var boats: [ModelEntity] = []
     private var vehicles: [MovingVehicle] = []
@@ -108,7 +109,9 @@ final class CityRenderer: NSObject {
         self.onSelect = onSelect
         if state.cityID != cityID {
             cityID = state.cityID; time = state.seconds; signature = ""; self.selected = nil
-            town.children.removeAll(); traffic.children.removeAll(); people.removeAll(); windows.removeAll(); boats.removeAll()
+            town.children.removeAll(); traffic.children.removeAll(); people.removeAll(); boats.removeAll()
+            dayWindows.children.removeAll(); nightWindows.children.removeAll()
+            town.addChild(dayWindows); town.addChild(nightWindows)
             seed = state.cityID.utf8.reduce(UInt64(1234)) { $0 &* 31 &+ UInt64($1) }
             buildTown(city: state.currentCity)
             target = .zero; radius = 80; yaw = 0.75; pitch = 0.62
@@ -120,7 +123,11 @@ final class CityRenderer: NSObject {
             sun.light.intensity = night ? 500 : 2300
             fill.light.intensity = night ? 280 : 850
             sun.light.color = UIColor(hex: night ? 0x9DB5DE : 0xFFF3DB)
-            for window in windows { window.model?.materials = [material(night ? 0xFFE4A2 : 0x7EABB1)] }
+            // Keep material resources immutable while RealityKit renders. Replacing
+            // hundreds of shared material blocks can crash older simulator runtimes.
+            dayWindows.isEnabled = !night
+            nightWindows.isEnabled = night
+            view?.environment.lighting.intensityExponent = night ? -1 : 0.5
         }
         let newSignature = state.currentLines.map { "\($0.id):\($0.tier)" }.joined(separator: ",") + (selected ?? "")
         if newSignature != signature {
@@ -148,7 +155,7 @@ final class CityRenderer: NSObject {
     func stop() {
         displayLink?.invalidate(); displayLink = nil
         anchor.removeFromParent()
-        vehicles.removeAll(); people.removeAll(); windows.removeAll(); boats.removeAll()
+        vehicles.removeAll(); people.removeAll(); boats.removeAll()
         meshes.removeAll(); materials.removeAll()
     }
     private func random() -> Float { seed = seed &* 6364136223846793005 &+ 1; return Float((seed >> 32) % 10000) / 10000 }
@@ -259,9 +266,9 @@ final class CityRenderer: NSObject {
         box([width,height,depth],color,[x,0.25+height/2,z],round: 0.035)
         for y in stride(from: Float(0.75), through: height+0.05, by: 0.65) {
             for dx: Float in [-0.4,0.4] {
-                windows.append(box([0.25,0.32,0.025],0x7EABB1,[x+dx,y,z+depth/2+0.02]))
-                windows.append(box([0.025,0.32,0.25],0x7EABB1,[x+width/2+0.02,y,z+dx]))
-                windows.append(box([0.025,0.32,0.25],0x7EABB1,[x-width/2-0.02,y,z+dx]))
+                window(size: [0.25,0.32,0.025],position: [x+dx,y,z+depth/2+0.02])
+                window(size: [0.025,0.32,0.25],position: [x+width/2+0.02,y,z+dx])
+                window(size: [0.025,0.32,0.25],position: [x-width/2-0.02,y,z+dx])
             }
         }
         box([0.29,0.53,0.035],0x698D88,[x,0.53,z+0.77])
@@ -277,10 +284,17 @@ final class CityRenderer: NSObject {
             box([0.4,0.2,0.4],0xBBC1B0,[x+0.25,height+0.47,z-0.2])
         }
     }
+    private func window(size: SIMD3<Float>, position: SIMD3<Float>) {
+        let day = box(size,0x7EABB1,position,parent: dayWindows)
+        guard let mesh = day.model?.mesh else { return }
+        let illuminated = ModelEntity(mesh: mesh, materials: [UnlitMaterial(color: UIColor(hex: 0xFFE0A0))])
+        illuminated.position = position
+        nightWindows.addChild(illuminated)
+    }
     private func hills() {
         for (x,z,h,s): (Float,Float,Float,Float) in [(-13,-14,4.2,2.4),(-16,-13.5,3.1,2.1),(-12,-16,5,2.3)] {
             mountain(radius: s, height: h, color: 0x94AC82, position: [x,-0.4,z])
-            mountain(radius: s*0.21, height: h*0.21, color: 0xE5E7D5, position: [x,h*0.79-0.4,z])
+            mountain(radius: s*0.21, height: h*0.21, color: 0xE5E7D5, position: [x,h*0.79-0.39,z])
         }
         box([0.75,0.7,0.75],0xDAB98F,[-15,3.6,-15])
     }
