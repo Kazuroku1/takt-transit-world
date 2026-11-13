@@ -1,45 +1,55 @@
-TAKT SWIFT 0.2.0 — VALIDIERUNG VOM 13. NOVEMBER 2026
+﻿TAKT SWIFT 0.4.0 — VALIDIERUNG VOM 13. NOVEMBER 2026
 
-Getesteter App-Quellstand:
-4c6e3abc18cb14e9ea2ea332acb98e74aea2fcc6
+Getesteter Quellstand:
+c80a8c3f522f83c5db940e3bc1432ea966386f07
 
-Erfolgreicher Build und Testlauf:
-https://github.com/Kazuroku1/takt-transit-world/actions/runs/43433811486
+Erfolgreicher vollständiger Build und Testlauf:
+https://github.com/Kazuroku1/takt-transit-world/actions/runs/43467102249
 
 Ergebnis:
-- 14 Swift-Kerntests bestanden, 0 Fehler.
-- 3 native XCTest-Bedienungsabläufe bestanden, 0 Fehler.
+- 23 Swift-Kerntests bestanden, 0 Fehler.
+- 5 native XCTest-Bedienungsabläufe bestanden, 0 Fehler.
 - Release-Archiv für ARM64-iPhones erfolgreich gebaut.
 - Simulator-App für arm64 und x86_64 erfolgreich gebaut.
-- UI-Testgerät: iPhone 16 Pro, Simulator mit iOS 18.5, Xcode 26.3.
+- iPhone-16-Pro-Simulator, Xcode 26.3, Standard-Mac-Runner.
 
-Geprüfte Bedienungsabläufe:
-- Erste Stadt öffnen und native RealityKit-Szene anzeigen.
-- Zweite Buslinie kaufen und Quest-Belohnung abholen.
-- Tram freischalten, Tram-Quest abholen und Buslinie ausbauen.
-- Weltkarte, Fahrzeugauswahl und Einstellungen öffnen.
-- Abendstimmung einschalten, Switch-Zustand prüfen, zur Stadt zurückkehren
-  und den Nachtmodus anhand des UI-Zustands bestätigen.
-- Alle sieben Verkehrsmittel in der nativen Szene darstellen.
-- Screenshots von Stadt, Nachtmodus, Linien, Flotte, Welt und Einstellungen.
+Geprüfte Abläufe:
+- Frischer Start mit Bergbus in Andermatt, zweite feste Buslinie kaufen.
+- Guthaben nach Kauf exakt prüfen; Scrollen löst keinen zusätzlichen Kauf aus.
+- Quest-Belohnung abholen, Buslinie auf 2/5 Fahrzeuge ausbauen.
+- Schweiz-Auswahl, Flotte, Unteransicht und Einstellungen öffnen/schliessen.
+- Abendstimmung einschalten und Zustand der zurückgekehrten Karte prüfen.
+- Alle neuen Verkehrsmittel in einem ausgebauten Schweizer Netz darstellen.
+- Vollbildkarte ohne Tab-Bar, Verschieben/Zoom, erhaltene Kameraposition nach
+  Sheet-Rückkehr, Linienfokus, ganze Schweiz, Regionsfokus und Querformat.
+- Altdorf aus einem vorbereiteten zulässigen Spielstand freischalten und
+  nach Andermatt zurückkehren; neue Region beginnt mit einem Bus.
 
-Die Screenshots wurden visuell kontrolliert. Ein beim Test gefundener Absturz
-in RealityKits Materialaktualisierung wurde durch vorbereitete Tages-/Nacht-
-Fenstergruppen behoben. Der anschliessende Nachtmodus-Test besteht.
+Die Kerntests prüfen ausserdem Transaktionen, Belohnungen, Speichern,
+Migration alter Spielstände, regionale Voraussetzungen, Tram vor S-Bahn,
+S-Bahn vor Fernzug, Fernzug vor Flugzeug und einen vollständigen simulierten
+Ausbau innerhalb des vorgesehenen längeren Fortschrittsfensters.
 
-Artefakte im Projektordner:
-build/Takt-Native.ipa
-build/Takt-Simulator.zip
-build/native-preview/
-build/native-validation/final-validation.json
+Screenshots wurden visuell kontrolliert: Andermatt mit Talrelief,
+Schweiz-Übersicht ohne überlappende Ortsnamen, Zürich, Abendstimmung,
+Linienausbau, Regionsauswahl und Querformat.
+
+Lokale Artefakte:
+build/Takt-Native.ipa — 15 371 580 Bytes, ARM64, Version 0.4.0 Build 4.
+SHA256: 7e16adfc2cbc82e9cc503cf2796a8060af7c224bd5e69d0feeb01a96512aedc4
+build/Takt-Simulator.zip — 16 514 717 Bytes, arm64 + x86_64.
+SHA256: 8bd6d2d7649bafd4e569b3583270e8a255f3a6a52e9e6f522610f7d367388bd7
+build/native-preview/schweiz-0.4/
+build/native-validation/switzerland-0.4.json
+build/native-validation/switzerland-0.4-tests/NativeTests.xcresult
+Die vorherige Version liegt unter build/native-validation/pre-switzerland/.
 
 Abgrenzung:
-Die Tests liefen auf einem Mac-Runner des öffentlichen GitHub-Repositories.
-Der T3-Gerätezugriff ist aktiv, aber auf dem hier verbundenen Windows-Laptop
-ist kein iOS-Simulator verfügbar. Es ist kein Mac-Gerätehost verbunden.
-Der interaktive Test im T3-Gerätefenster bleibt deshalb offen.
-
-Nicht durchgeführt: Test auf einem physischen iPhone, langfristige Akku- oder
-Leistungsmessung, iPad-Bedienungstest und TestFlight-Verteilung.
-Die native Geräte-IPA muss für ein persönliches Gerät noch signiert werden.
-SideStore und LiveContainer wurden nicht installiert.
+Die App ist SwiftUI/RealityKit ohne WebView und enthält die Karten offline.
+Andermatt und Zürich haben echte horizontale Geometrien; Gelände, Höhen und
+weitere Regionen sind stilisiert. Quellen in SCHWEIZ-QUELLEN.txt.
+Die Tests liefen auf dem GitHub-Mac. Auf diesem Windows-PC ist kein T3-iOS-
+Simulator verfügbar und kein Mac-Gerätehost verbunden. Nicht durchgeführt:
+physischer iPhone-Test, Langzeit-Akku-/Leistungsmessung, iPad-Test, TestFlight.
+Die Geräte-IPA ist unsigniert und muss vor einer persönlichen Installation
+signiert werden. SideStore und LiveContainer wurden nicht installiert.

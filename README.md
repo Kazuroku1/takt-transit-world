@@ -9,11 +9,39 @@ Oberfläche, RealityKit für die 3D-Stadt und ein eigener Swift-Spielkern. Diese
 Xcode-Projekt verwendet weder Capacitor noch eine WebView und hat keine externen
 Swift-Paketabhängigkeiten. Mindestversion: iOS/iPadOS 17.
 
-Enthalten: alle sieben Verkehrsmittel, neun feste Linien pro Stadt, Fahrzeugausbau,
-acht Städte mit eigenen Netzen, Quests und Tagesaufgaben, Einkommen/XP, Ereignisse,
+Enthalten: Bergbusse, Trams, S-Bahnen, Fernzüge und Flugzeuge, feste kaufbare
+Linien, Fahrzeugausbau, acht Schweizer Regionen mit eigenen Netzen,
+Quests und Tagesaufgaben, Einkommen/XP, Ereignisse,
 Tag/Nacht, Kamera-Gesten, haptisches Feedback, Pause/Tempo und lokale Spielstände
 mit Sicherung sowie nativem Datei-Import/-Export. Fahrzeuge und Fahrgäste werden
 als native RealityKit-Modelle animiert. Es wird kein Kamerazugriff benötigt.
+
+Die Version 0.4 startet mit Bergbussen in Andermatt auf einer zusammenhängenden
+Schweizkarte. Danach folgen Altdorf, Schwyz, Luzern, Zürich, Bern, Basel und Genf.
+Jede neue Region beginnt mit Bussen. Weitere Verkehrsmittel setzen ein
+passendes lokales Netz voraus; Trams gibt es in den Tramstädten, Flugzeuge
+erst nach dem Fernverkehr in Zürich, Basel und Genf.
+
+Die App öffnet direkt die bildschirmfüllende Karte. Schwebende
+Bedienelemente öffnen Linien, Flotte, Aufgaben und Städteauswahl; eine untere
+Tab-Leiste entfällt. Ein Finger verschiebt die Karte, zwei Finger zoomen oder
+drehen. Die Schweiz-Übersicht zeigt das ganze Land; die Regionsaktion bringt
+die Kamera wieder zum aktuellen Netz.
+
+Zürich enthält 48'482 echte Gebäudegrundrisse sowie Strassen, Gewässer und
+Grünflächen aus der amtlichen Vermessung (CCZero), offline in 91 Kacheln
+gebündelt. Gebäudehöhen und Architekturdetails sind stilisiert, das Gelände
+ist flach. Bus 31/33, Tram 4/8 und ein S12-Ausschnitt folgen vereinfachten
+amtlichen Liniengeometrien. Andermatt enthält 822 Gebäudeumrisse sowie reale
+Strassen aus OpenStreetMap. Die beiden Bergbusstrecken folgen diesen Strassen.
+Die Schweiz-Silhouette und grossen Seen stammen von Natural Earth. Weitere
+Orte, Berge und Verbindungen sind geografisch verortete, stilisierte
+Spielinhalte. Quellen, Lizenzen und Grenzen: `native/SCHWEIZ-QUELLEN.txt`,
+`native/GEODATEN-QUELLEN.txt` und `native/LINIENQUELLEN.txt`.
+
+Alte native Spielstände werden ins Schweiz-Format übernommen. Unterstützte
+Netze und Statistiken bleiben erhalten; entfernte Weltregionen und nicht mehr
+verwendete Verkehrsmittel werden beim Umstieg erstattet.
 
 Auf einem Mac mit Xcode 26:
 
@@ -35,11 +63,12 @@ mit einer Simulator-App für Apple Silicon und Intel. Das Cloud-Workflow
 und XCTest-Bedienabläufe auf einem iPhone-Simulator aus. Der Workflow startet
 manuell; auf unserem öffentlichen Repository werden Standard-GitHub-Runner benutzt.
 
-Der [native Prüflauf vom 13. November 2026](https://github.com/Kazuroku1/takt-transit-world/actions/runs/43433811486)
-ist erfolgreich: 14 Kerntests und 3 native Bedienungsabläufe bestanden, inklusive
-Käufen, Belohnungen, Ausbau und aktiviertem Nachtmodus. Einzelheiten und Grenzen
+Der [native Prüflauf vom 13. November 2026](https://github.com/Kazuroku1/takt-transit-world/actions/runs/43467102249)
+ist erfolgreich: 23 Kerntests und 5 native Bedienungsabläufe bestanden, inklusive
+Bergbus-Käufen, Belohnungen, Ausbau, Regionswechsel, Kartensteuerung und
+aktivierter Abendstimmung. Einzelheiten und Grenzen
 stehen in `native/VALIDIERUNG.txt`; die geprüften Screenshots liegen lokal unter
-`build/native-preview/`. Auf einem physischen iPhone wurde noch nicht getestet.
+`build/native-preview/schweiz-0.4/`. Auf einem physischen iPhone wurde noch nicht getestet.
 
 T3 Code: **Settings → Integrations → Devices → Agent device access** aktivieren.
 Die Einstellung wird gegebenenfalls erst in einer neuen Agent-Sitzung wirksam.
@@ -77,7 +106,7 @@ npm run build
 npm run preview
 ```
 
-## Spiel
+## Spiel im Laptop-Prototyp
 
 - Start in Zürich mit einer fahrenden Buslinie und 1 200 Münzen.
 - Ausschliesslich **vordefinierte Linien kaufen und freischalten**. Strecken und Haltestellen stehen fest.
@@ -87,7 +116,7 @@ npm run preview
 - Acht erschliessbare Städte: Zürich, Bern, Paris, London, New York, Tokio, Rio de Janeiro und Sydney. Jede Stadt hat einen eigenen persistenten Linienbestand. Alle erschlossenen Netze verdienen gleichzeitig, solange die App sichtbar läuft.
 - Automatischer lokaler Spielstand, Export/Import in den Einstellungen, Pause und bis zu dreifaches Tempo.
 
-Die Städte sind stilisierte Miniaturwelten. Sie verwenden in dieser Beta dieselbe Strassengrundstruktur mit variierten Gebäuden und lokalisierten Haltestellennamen, keine geografisch originalgetreuen ÖV-Netze. Im Hintergrund oder bei geschlossener App pausiert die Simulation. Kein Konto, Server, Abo oder In-App-Kauf erforderlich.
+Im Laptop-Prototyp sind die Städte stilisierte Miniaturwelten. Sie verwenden dieselbe Strassengrundstruktur mit variierten Gebäuden und lokalisierten Haltestellennamen. Die neue amtliche Zürich-Karte gehört zur nativen Swift-App. Im Hintergrund oder bei geschlossener App pausiert die Simulation. Kein Konto, Server, Abo oder In-App-Kauf erforderlich.
 
 ## Legacy-Prototyp: Kostenlos aufs iPhone, mit Windows
 

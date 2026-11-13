@@ -26,10 +26,12 @@ in der App enthalten. Das Spiel lädt keine Strecken aus dem Internet.
 4:93 Punkte, ca.5.18km; 8:133 Punkte, ca.8.78km;
 S12-Kartenausschnitt:147 Punkte, ca.19.68km.
 
-Schiff: von Hand angenäherte Strecke Bürkliplatz–Zürichhorn.
-Metro, Seilbahn und Flugplatz/Flugkorridor sind ausdrücklich fiktive
-Spielerweiterungen. Zürich besitzt keine Metro. Diese Angaben stehen auch
-bei den jeweiligen Linien in der App.
+Die noch enthaltenen Geometrien für Schiff, Metro und Seilbahn stammen aus
+dem Vorgänger. Diese Verkehrsmittel sind im neuen Schweiz-Ausbaupfad nicht
+freischaltbar. Zürich besitzt keine Metro.
 
-Andere freischaltbare Städte verwenden vorerst die bestehenden stilisierten
-Karten. Nur Zürich erhält in dieser Version die amtliche Stadtgeometrie.
+Fernzug- und Flugverbindungen des neuen Spiels stehen in SwissGeography.swift.
+Sie verbinden Schweizer Regionen schematisch und sind keine exakten Gleis-
+oder Flugplatzgeometrien. Andermatt verwendet gesonderte OSM-Strassendaten.
+Weitere Schweizer Regionen sind geografisch verortet, aber stilisiert.
+Die ergänzenden Quellen und Lizenzen stehen in SCHWEIZ-QUELLEN.txt.
